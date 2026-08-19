@@ -2,6 +2,7 @@ from src.analysis.financial import MATERIALITY_THRESHOLD
 from src.database.models import Concern
 from src.database.repository import Repository
 from src.services.financial_analysis_service import FinancialAnalysisResult
+from src.services.monitoring import record_monitoring_diff
 
 
 class ConcernDetectionService:
@@ -9,12 +10,15 @@ class ConcernDetectionService:
     severity, and a stated root cause — not a model's impression of the
     data). Runs over FinancialAnalysisService's already-deterministic output.
     Re-running replaces prior detected concerns rather than accumulating
-    duplicates, since a concern list should reflect current state."""
+    duplicates, since a concern list should reflect current state — but
+    records what changed as MonitoringEvents first (spec section 15 Phase 5)."""
 
     def __init__(self, repo: Repository):
         self.repo = repo
 
     def run(self, project_id: int, analysis: FinancialAnalysisResult) -> list[Concern]:
+        previous = {c.title: c.severity for c in self.repo.list_concerns(project_id)}
+
         self.repo.clear_concerns(project_id)
         concerns: list[Concern] = []
 
@@ -26,6 +30,9 @@ class ConcernDetectionService:
             revenue_concern = self._revenue_decline(project_id, analysis)
             if revenue_concern is not None:
                 concerns.append(revenue_concern)
+
+        current = {c.title: c.severity for c in concerns}
+        record_monitoring_diff(self.repo, project_id, "concern", previous, current)
 
         return concerns
 

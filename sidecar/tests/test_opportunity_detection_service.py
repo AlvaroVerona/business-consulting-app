@@ -40,3 +40,23 @@ def test_no_opex_data_yields_no_opportunity(db_session):
     analysis = FinancialAnalysisService(repo).run(project_id)
 
     assert OpportunityDetectionService(repo).run(project_id, analysis) == []
+
+
+def test_detection_records_new_monitoring_event(db_session):
+    repo = Repository(db_session)
+    project_id = _seed_pnl(
+        repo,
+        [
+            "month: Jan; revenue: 10000; cogs: 6000; opex: 3000",
+            "month: Feb; revenue: 10000; cogs: 6000; opex: 2000",
+        ],
+    )
+    analysis = FinancialAnalysisService(repo).run(project_id)
+
+    OpportunityDetectionService(repo).run(project_id, analysis)
+
+    events = repo.list_monitoring_events(project_id)
+    assert len(events) == 1
+    assert events[0].event_type == "new"
+    assert events[0].entity_type == "opportunity"
+    assert events[0].title == "Operating cost efficiency improving"

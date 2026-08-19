@@ -6,6 +6,7 @@ struct ProjectWorkspaceView: View {
     @State private var isPresentingFileImporter = false
     @State private var isPresentingDeepAnalysis = false
     @State private var isPresentingDashboard = false
+    @State private var isPresentingScenario = false
 
     var body: some View {
         HSplitView {
@@ -26,6 +27,13 @@ struct ProjectWorkspaceView: View {
             }
             ToolbarItem {
                 Button {
+                    isPresentingScenario = true
+                } label: {
+                    Label("Scenarios", systemImage: "slider.horizontal.3")
+                }
+            }
+            ToolbarItem {
+                Button {
                     isPresentingDeepAnalysis = true
                 } label: {
                     Label("Deep Analysis", systemImage: "chart.bar.doc.horizontal")
@@ -37,6 +45,9 @@ struct ProjectWorkspaceView: View {
         }
         .sheet(isPresented: $isPresentingDashboard) {
             DashboardView(viewModel: viewModel)
+        }
+        .sheet(isPresented: $isPresentingScenario) {
+            ScenarioView(viewModel: viewModel)
         }
         .task { await viewModel.load() }
         .fileImporter(

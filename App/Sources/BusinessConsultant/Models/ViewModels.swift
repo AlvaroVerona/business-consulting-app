@@ -82,6 +82,10 @@ final class ProjectViewModel {
     var financialAnalysis: FinancialAnalysis?
     var isExportingReport = false
 
+    var monitoringEvents: [MonitoringEvent] = []
+    var scenarioResult: ScenarioResult?
+    var isRunningScenario = false
+
     private let client = SidecarClient.shared
 
     init(project: Project) {
@@ -90,12 +94,36 @@ final class ProjectViewModel {
 
     func load() async {
         do {
-            documents = try await client.listDocuments(projectId: project.id)
-            concerns = try await client.listConcerns(projectId: project.id)
-            opportunities = try await client.listOpportunities(projectId: project.id)
-            hypotheses = try await client.listHypotheses(projectId: project.id)
-            businessProfile = try await client.getBusinessProfile(projectId: project.id)
-            deepAnalysisRuns = try await client.listDeepAnalysisRuns(projectId: project.id)
+            // These 7 reads are independent — running them concurrently
+            // instead of one-after-another saves 6 round-trips' worth of
+            // latency on every workspace load.
+            async let documentsTask = client.listDocuments(projectId: project.id)
+            async let concernsTask = client.listConcerns(projectId: project.id)
+            async let opportunitiesTask = client.listOpportunities(projectId: project.id)
+            async let hypothesesTask = client.listHypotheses(projectId: project.id)
+            async let businessProfileTask = client.getBusinessProfile(projectId: project.id)
+            async let deepAnalysisRunsTask = client.listDeepAnalysisRuns(projectId: project.id)
+            async let monitoringEventsTask = client.listMonitoringEvents(projectId: project.id)
+
+            (documents, concerns, opportunities, hypotheses, businessProfile, deepAnalysisRuns, monitoringEvents) =
+                try await (
+                    documentsTask, concernsTask, opportunitiesTask, hypothesesTask,
+                    businessProfileTask, deepAnalysisRunsTask, monitoringEventsTask
+                )
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func runScenario(adjustments: [ScenarioAdjustment], basePeriod: String? = nil) async {
+        isRunningScenario = true
+        defer { isRunningScenario = false }
+
+        do {
+            scenarioResult = try await client.runScenario(
+                projectId: project.id,
+                request: ScenarioRequest(basePeriod: basePeriod, adjustments: adjustments)
+            )
         } catch {
             errorMessage = error.localizedDescription
         }

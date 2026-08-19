@@ -53,6 +53,7 @@ class Project(Base):
     opportunities = relationship("Opportunity", back_populates="project", cascade="all, delete-orphan")
     business_profiles = relationship("BusinessProfile", back_populates="project", cascade="all, delete-orphan")
     deep_analysis_runs = relationship("DeepAnalysisRun", back_populates="project", cascade="all, delete-orphan")
+    monitoring_events = relationship("MonitoringEvent", back_populates="project", cascade="all, delete-orphan")
     chat_messages = relationship(
         "ChatMessage",
         back_populates="project",
@@ -259,6 +260,31 @@ class DeepAnalysisRun(Base):
     quality_issues = Column(JSON, nullable=True)
 
     project = relationship("Project", back_populates="deep_analysis_runs")
+
+
+class MonitoringEvent(Base):
+    """Spec section 15 Phase 5, Continuous Monitoring. A history log of
+    concern/opportunity state changes across detection runs — populated by
+    ConcernDetectionService/OpportunityDetectionService diffing the previous
+    detected set against the new one before replacing it (see
+    services/monitoring.py:record_monitoring_diff, the single source of
+    truth for these values). `event_type` is "new" | "resolved" | "changed" —
+    for concerns, `previous_value`/`new_value` hold severity; for
+    opportunities, confidence."""
+
+    __tablename__ = "monitoring_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    entity_type = Column(String, nullable=False)  # "concern" | "opportunity"
+    event_type = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    previous_value = Column(String, nullable=True)
+    new_value = Column(String, nullable=True)
+
+    project = relationship("Project", back_populates="monitoring_events")
 
 
 class ChatMessage(Base):

@@ -2,6 +2,7 @@ from src.analysis.financial import MATERIALITY_THRESHOLD, classify_trend
 from src.database.models import Opportunity
 from src.database.repository import Repository
 from src.services.financial_analysis_service import FinancialAnalysisResult
+from src.services.monitoring import record_monitoring_diff
 
 
 class OpportunityDetectionService:
@@ -15,6 +16,8 @@ class OpportunityDetectionService:
         self.repo = repo
 
     def run(self, project_id: int, analysis: FinancialAnalysisResult) -> list[Opportunity]:
+        previous = {o.title: o.confidence for o in self.repo.list_opportunities(project_id)}
+
         self.repo.clear_opportunities(project_id)
         opportunities: list[Opportunity] = []
 
@@ -41,5 +44,8 @@ class OpportunityDetectionService:
                             next_step="Identify which opex line(s) improved and whether the change is structural or one-off.",
                         )
                     )
+
+        current = {o.title: o.confidence for o in opportunities}
+        record_monitoring_diff(self.repo, project_id, "opportunity", previous, current)
 
         return opportunities

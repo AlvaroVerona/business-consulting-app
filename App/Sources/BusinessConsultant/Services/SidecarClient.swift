@@ -168,6 +168,16 @@ actor SidecarClient {
         return data
     }
 
+    // MARK: - scenario modeling / monitoring
+
+    func runScenario(projectId: Int, request: ScenarioRequest) async throws -> ScenarioResult {
+        try await post("/projects/\(projectId)/scenarios", body: request)
+    }
+
+    func listMonitoringEvents(projectId: Int) async throws -> [MonitoringEvent] {
+        try await get("/projects/\(projectId)/monitoring/events")
+    }
+
     // MARK: - plumbing
 
     private struct EmptyBody: Encodable {}

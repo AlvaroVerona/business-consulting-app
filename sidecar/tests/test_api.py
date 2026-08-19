@@ -1,6 +1,7 @@
 import io
 import json
 
+import pytest
 from fastapi.testclient import TestClient
 
 import src.api.routes as routes_module
@@ -276,3 +277,83 @@ def test_report_export_endpoints_404_for_unknown_project():
         assert client.get("/projects/999999/reports/pdf").status_code == 404
         assert client.get("/projects/999999/reports/pptx").status_code == 404
         assert client.get("/projects/999999/reports/excel").status_code == 404
+
+
+def test_scenario_endpoint():
+    with TestClient(app) as client:
+        company = client.post("/companies", json={"name": "Acme Wine Bar"}).json()
+        project = client.post(f"/companies/{company['id']}/projects", json={"name": "Diagnostic"}).json()
+
+        csv_bytes = b"month,revenue,cogs,opex\nJan,10000,4000,3000\nFeb,10000,5500,2500\n"
+        client.post(
+            f"/projects/{project['id']}/documents",
+            files={"file": ("pnl.csv", io.BytesIO(csv_bytes), "text/csv")},
+        )
+
+        response = client.post(
+            f"/projects/{project['id']}/scenarios",
+            json={"adjustments": [{"field": "cogs", "kind": "percent", "value": -0.10}]},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["baseline"]["period"] == "Feb"
+        assert body["scenario"]["cogs"] == pytest.approx(4950.0)  # 5500 * 0.9
+        assert body["gross_margin_delta"] > 0
+
+
+def test_scenario_endpoint_422_for_unknown_period_name():
+    """Regression: the original version of this test posted base_period
+    without ever uploading a P&L, so it actually exercised the "no financial
+    data at all" 422 branch (test_scenario_endpoint_422_for_no_financial_data
+    below), not the "period name doesn't exist" branch it's named for."""
+    with TestClient(app) as client:
+        company = client.post("/companies", json={"name": "Acme"}).json()
+        project = client.post(f"/companies/{company['id']}/projects", json={"name": "P1"}).json()
+
+        csv_bytes = b"month,revenue,cogs\nJan,10000,4000\n"
+        client.post(
+            f"/projects/{project['id']}/documents",
+            files={"file": ("pnl.csv", io.BytesIO(csv_bytes), "text/csv")},
+        )
+
+        response = client.post(
+            f"/projects/{project['id']}/scenarios",
+            json={"base_period": "Never", "adjustments": []},
+        )
+        assert response.status_code == 422
+        assert "Never" in response.json()["detail"]
+
+
+def test_scenario_endpoint_422_for_no_financial_data():
+    with TestClient(app) as client:
+        company = client.post("/companies", json={"name": "Acme"}).json()
+        project = client.post(f"/companies/{company['id']}/projects", json={"name": "P1"}).json()
+
+        response = client.post(f"/projects/{project['id']}/scenarios", json={"adjustments": []})
+        assert response.status_code == 422
+
+
+def test_monitoring_events_endpoint():
+    with TestClient(app) as client:
+        company = client.post("/companies", json={"name": "Acme Wine Bar"}).json()
+        project = client.post(f"/companies/{company['id']}/projects", json={"name": "Diagnostic"}).json()
+
+        csv_bytes = b"month,revenue,cogs\nJan,10000,4000\nFeb,10000,7000\n"
+        client.post(
+            f"/projects/{project['id']}/documents",
+            files={"file": ("pnl.csv", io.BytesIO(csv_bytes), "text/csv")},
+        )
+
+        assert client.get(f"/projects/{project['id']}/monitoring/events").json() == []
+
+        client.post(f"/projects/{project['id']}/concerns/detect")
+
+        events = client.get(f"/projects/{project['id']}/monitoring/events").json()
+        assert len(events) == 1
+        assert events[0]["event_type"] == "new"
+        assert events[0]["title"] == "Gross margin compression"
+
+
+def test_monitoring_events_404_for_unknown_project():
+    with TestClient(app) as client:
+        assert client.get("/projects/999999/monitoring/events").status_code == 404

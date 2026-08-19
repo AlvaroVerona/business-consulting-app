@@ -5,6 +5,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from src.analysis.scenario import ScenarioAdjustment
 from src.database.database import get_db
 from src.database.models import Finding
 from src.database.repository import Repository
@@ -23,14 +24,17 @@ from src.schemas.document import DocumentOut
 from src.schemas.evidence import Citation, FindingOut
 from src.schemas.financial import FinancialAnalysisOut, PeriodMetricsOut
 from src.schemas.hypothesis import HypothesisCreate, HypothesisOut, HypothesisUpdate
+from src.schemas.monitoring import MonitoringEventOut
 from src.schemas.opportunity import OpportunityOut
 from src.schemas.project import ProjectCreate, ProjectOut
+from src.schemas.scenario import ScenarioRequest, ScenarioResultOut
 from src.services.business_understanding_agent import BusinessUnderstandingAgent
 from src.services.concern_detection_service import ConcernDetectionService
 from src.services.deep_analysis_orchestrator import DeepAnalysisOrchestrator
 from src.services.financial_analysis_service import FinancialAnalysisService
 from src.services.opportunity_detection_service import OpportunityDetectionService
 from src.services.quick_answer_service import QuickAnswerService
+from src.services.scenario_service import ScenarioService
 from src.storage import extension_of, save_upload
 
 
@@ -48,6 +52,20 @@ def _finding_to_out(f: Finding) -> FindingOut:
         calculation=f.calculation,
         assumption=f.assumption,
         origin=f.origin,
+    )
+
+
+def _period_to_out(p) -> PeriodMetricsOut:
+    return PeriodMetricsOut(
+        period=p.period,
+        revenue=p.revenue,
+        cogs=p.cogs,
+        opex=p.opex,
+        ebitda=p.ebitda,
+        ebitda_is_implied=p.ebitda_is_implied,
+        gross_margin=p.gross_margin,
+        ebitda_margin=p.ebitda_margin,
+        opex_ratio=p.opex_ratio,
     )
 
 logger = logging.getLogger(__name__)
@@ -143,20 +161,7 @@ def run_financial_analysis(project_id: int, repo: Repository = Depends(get_repo)
     result = FinancialAnalysisService(repo).run(project_id)
 
     return FinancialAnalysisOut(
-        periods=[
-            PeriodMetricsOut(
-                period=p.period,
-                revenue=p.revenue,
-                cogs=p.cogs,
-                opex=p.opex,
-                ebitda=p.ebitda,
-                ebitda_is_implied=p.ebitda_is_implied,
-                gross_margin=p.gross_margin,
-                ebitda_margin=p.ebitda_margin,
-                opex_ratio=p.opex_ratio,
-            )
-            for p in result.periods
-        ],
+        periods=[_period_to_out(p) for p in result.periods],
         revenue_trend=result.revenue_trend,
         gross_margin_trend=result.gross_margin_trend,
         ebitda_margin_trend=result.ebitda_margin_trend,
@@ -363,3 +368,37 @@ def get_excel_export(project_id: int, repo: Repository = Depends(get_repo)):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers=_attachment_headers(filename),
     )
+
+
+# --- scenario modeling (spec section 15 Phase 5) ---------------------------------
+
+
+@router.post("/projects/{project_id}/scenarios", response_model=ScenarioResultOut)
+def run_scenario(project_id: int, payload: ScenarioRequest, repo: Repository = Depends(get_repo)):
+    if repo.get_project(project_id) is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    adjustments = [ScenarioAdjustment(field=a.field, kind=a.kind, value=a.value) for a in payload.adjustments]
+
+    try:
+        result = ScenarioService(repo).run(project_id, adjustments, base_period=payload.base_period)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+    return ScenarioResultOut(
+        baseline=_period_to_out(result.baseline),
+        scenario=_period_to_out(result.scenario),
+        revenue_delta=result.revenue_delta,
+        gross_margin_delta=result.gross_margin_delta,
+        ebitda_margin_delta=result.ebitda_margin_delta,
+    )
+
+
+# --- monitoring (spec section 15 Phase 5) -----------------------------------------
+
+
+@router.get("/projects/{project_id}/monitoring/events", response_model=list[MonitoringEventOut])
+def list_monitoring_events(project_id: int, repo: Repository = Depends(get_repo)):
+    if repo.get_project(project_id) is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return repo.list_monitoring_events(project_id)

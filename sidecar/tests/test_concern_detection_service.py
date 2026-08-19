@@ -70,3 +70,44 @@ def test_rerunning_detection_replaces_prior_concerns(db_session):
 
     assert len(first_run) == len(second_run)
     assert len(repo.list_concerns(project_id)) == len(second_run)  # not doubled
+
+
+def test_first_detection_run_records_new_monitoring_events(db_session):
+    repo = Repository(db_session)
+    project_id = _seed_pnl(
+        repo,
+        [
+            "month: Jan; revenue: 10000; cogs: 4000",
+            "month: Feb; revenue: 10000; cogs: 7000",
+        ],
+    )
+    analysis = FinancialAnalysisService(repo).run(project_id)
+
+    ConcernDetectionService(repo).run(project_id, analysis)
+
+    events = repo.list_monitoring_events(project_id)
+    assert len(events) == 1
+    assert events[0].event_type == "new"
+    assert events[0].title == "Gross margin compression"
+
+
+def test_resolved_concern_recorded_when_it_no_longer_recurs(db_session):
+    repo = Repository(db_session)
+    project_id = _seed_pnl(
+        repo,
+        [
+            "month: Jan; revenue: 10000; cogs: 4000",
+            "month: Feb; revenue: 10000; cogs: 7000",  # material drop -> concern
+        ],
+    )
+    analysis = FinancialAnalysisService(repo).run(project_id)
+    ConcernDetectionService(repo).run(project_id, analysis)
+
+    # Simulate the margin recovering on a later re-run: no material drop now.
+    stable_analysis = FinancialAnalysisService(repo).run(project_id)
+    stable_analysis.gross_margin_trend = "stable"
+    ConcernDetectionService(repo).run(project_id, stable_analysis)
+
+    events = repo.list_monitoring_events(project_id)
+    event_types = [e.event_type for e in events]
+    assert "resolved" in event_types

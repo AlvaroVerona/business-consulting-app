@@ -264,3 +264,52 @@ struct FinancialAnalysis: Codable, Hashable {
     var ebitdaMarginTrend: String?
     var findings: [Finding]
 }
+
+// MARK: - Phase 5: scenario modeling / monitoring
+
+enum ScenarioField: String, Codable, CaseIterable {
+    case revenue, cogs, opex
+
+    var label: String {
+        switch self {
+        case .revenue: return "Revenue"
+        case .cogs: return "COGS"
+        case .opex: return "Opex"
+        }
+    }
+}
+
+struct ScenarioAdjustment: Codable, Hashable, Identifiable {
+    let id = UUID()
+    var field: ScenarioField
+    var kind: String = "percent"  // this app's UI only offers percent adjustments; "absolute" exists API-side
+    var value: Double  // 0.10 means "+10%"
+
+    enum CodingKeys: String, CodingKey {
+        case field, kind, value
+    }
+}
+
+struct ScenarioRequest: Codable {
+    var basePeriod: String?
+    var adjustments: [ScenarioAdjustment]
+}
+
+struct ScenarioResult: Codable, Hashable {
+    var baseline: PeriodMetrics
+    var scenario: PeriodMetrics
+    var revenueDelta: Double?
+    var grossMarginDelta: Double?
+    var ebitdaMarginDelta: Double?
+}
+
+struct MonitoringEvent: Codable, Identifiable, Hashable {
+    let id: Int
+    var projectId: Int
+    var entityType: String
+    var eventType: String
+    var title: String
+    var previousValue: String?
+    var newValue: String?
+    let createdAt: Date
+}

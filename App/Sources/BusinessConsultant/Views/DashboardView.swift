@@ -23,6 +23,10 @@ struct DashboardView: View {
                             description: Text("Upload a P&L (CSV or XLSX with period/revenue/cogs columns) and run the financial analysis.")
                         )
                     }
+
+                    if !viewModel.monitoringEvents.isEmpty {
+                        monitoringTimeline
+                    }
                 }
                 .padding()
             }
@@ -94,6 +98,60 @@ struct DashboardView: View {
                 }
             }
             .frame(height: 180)
+        }
+    }
+
+    /// Spec section 15 Phase 5, Continuous Monitoring — a history of concern/
+    /// opportunity state changes across detection runs (populated server-side
+    /// by ConcernDetectionService/OpportunityDetectionService diffing).
+    private var monitoringTimeline: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Recent Changes").font(.headline)
+            ForEach(viewModel.monitoringEvents.prefix(10)) { event in
+                MonitoringEventRow(event: event)
+            }
+        }
+    }
+}
+
+private struct MonitoringEventRow: View {
+    let event: MonitoringEvent
+
+    var icon: String {
+        switch event.eventType {
+        case "new": return "plus.circle.fill"
+        case "resolved": return "checkmark.circle.fill"
+        case "changed": return "arrow.triangle.2.circlepath.circle.fill"
+        default: return "circle.fill"
+        }
+    }
+
+    var color: Color {
+        switch event.eventType {
+        case "new": return event.entityType == "concern" ? .red : .green
+        case "resolved": return .secondary
+        case "changed": return .orange
+        default: return .secondary
+        }
+    }
+
+    var description: String {
+        switch event.eventType {
+        case "new": return "New \(event.entityType): \(event.title) (\(event.newValue ?? ""))"
+        case "resolved": return "Resolved \(event.entityType): \(event.title)"
+        case "changed": return "\(event.title): \(event.previousValue ?? "") → \(event.newValue ?? "")"
+        default: return event.title
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon).foregroundStyle(color).font(.caption)
+            Text(description).font(.caption)
+            Spacer()
+            Text(event.createdAt.formatted(date: .abbreviated, time: .omitted))
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
         }
     }
 }

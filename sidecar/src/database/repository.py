@@ -12,6 +12,7 @@ from src.database.models import (
     DocumentChunk,
     Finding,
     Hypothesis,
+    MonitoringEvent,
     Opportunity,
     Project,
 )
@@ -299,6 +300,23 @@ class Repository:
             self.db.query(DeepAnalysisRun)
             .filter(DeepAnalysisRun.project_id == project_id)
             .order_by(DeepAnalysisRun.created_at.desc())
+            .all()
+        )
+
+    # --- monitoring ---------------------------------------------------
+
+    def create_monitoring_event(self, project_id: int, **fields) -> MonitoringEvent:
+        event = MonitoringEvent(project_id=project_id, **fields)
+        self.db.add(event)
+        self.db.commit()
+        self.db.refresh(event)
+        return event
+
+    def list_monitoring_events(self, project_id: int) -> list[MonitoringEvent]:
+        return (
+            self.db.query(MonitoringEvent)
+            .filter(MonitoringEvent.project_id == project_id)
+            .order_by(MonitoringEvent.created_at.desc())
             .all()
         )
 
