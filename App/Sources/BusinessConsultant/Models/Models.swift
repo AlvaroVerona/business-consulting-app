@@ -241,3 +241,26 @@ struct DeepAnalysisRun: Codable, Identifiable, Hashable {
 struct DeepAnalysisRequest: Codable {
     var useClaude: Bool = false
 }
+
+// MARK: - Phase 4: financial analysis / reports
+
+struct PeriodMetrics: Codable, Hashable, Identifiable {
+    var id: String { period }
+    var period: String
+    var revenue: Double?
+    var cogs: Double?
+    var opex: Double?
+    var ebitda: Double?
+    var ebitdaIsImplied: Bool
+    var grossMargin: Double?
+    var ebitdaMargin: Double?
+    var opexRatio: Double?
+}
+
+struct FinancialAnalysis: Codable, Hashable {
+    var periods: [PeriodMetrics]
+    var revenueTrend: String?
+    var grossMarginTrend: String?
+    var ebitdaMarginTrend: String?
+    var findings: [Finding]
+}

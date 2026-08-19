@@ -5,6 +5,7 @@ struct ProjectWorkspaceView: View {
     @State var viewModel: ProjectViewModel
     @State private var isPresentingFileImporter = false
     @State private var isPresentingDeepAnalysis = false
+    @State private var isPresentingDashboard = false
 
     var body: some View {
         HSplitView {
@@ -18,6 +19,13 @@ struct ProjectWorkspaceView: View {
         .toolbar {
             ToolbarItem {
                 Button {
+                    isPresentingDashboard = true
+                } label: {
+                    Label("Dashboard", systemImage: "chart.line.uptrend.xyaxis")
+                }
+            }
+            ToolbarItem {
+                Button {
                     isPresentingDeepAnalysis = true
                 } label: {
                     Label("Deep Analysis", systemImage: "chart.bar.doc.horizontal")
@@ -26,6 +34,9 @@ struct ProjectWorkspaceView: View {
         }
         .sheet(isPresented: $isPresentingDeepAnalysis) {
             DeepAnalysisView(viewModel: viewModel)
+        }
+        .sheet(isPresented: $isPresentingDashboard) {
+            DashboardView(viewModel: viewModel)
         }
         .task { await viewModel.load() }
         .fileImporter(

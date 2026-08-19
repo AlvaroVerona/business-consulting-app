@@ -46,3 +46,13 @@ Verified live end-to-end against local `llama3.1` (a wine-bar memo + a 3-month d
 Deliberately deferred (see spec section 15 phasing): issue-tree construction (MECE decomposition — genuinely needs its own focused pass, not a stub), true parallel multi-agent execution (current pipeline is sequential, matching `agent-platform`'s proven pattern), and a qualitative LLM-based pass in QualityReviewerService (current version is deterministic/mechanical checks only).
 
 Shared helper extracted this phase: `services/evidence_validation.py:validate_evidence_citations` — QuickAnswerService and BusinessUnderstandingAgent both had near-identical citation-validation logic; factored out before it could drift.
+
+## Phase 4 status (2026-08-19)
+
+Built professional outputs (spec section 15 Phase 4) as a pure rendering layer over already-validated data — **no LLM calls happen while building or rendering a report**. `reports/report_context.py:build_report_context` assembles a `ReportContext` (company, project, latest COMPLETED `DeepAnalysisRun`'s synthesis if any, business profile, financial analysis, concerns, opportunities, hypotheses); `reports/pdf_report.py` (reportlab), `reports/pptx_report.py` (python-pptx), `reports/excel_export.py` (openpyxl, already a dependency) each render it. All three degrade gracefully when no Deep Analysis run has completed yet — they show what's available rather than blocking the export. Every PDF/PPTX carries the spec section 1 disclaimer ("not affiliated with... McKinsey, BCG, Bain...").
+
+SwiftUI additions: an Export menu (PDF/PowerPoint/Excel, `NSSavePanel`) in `DeepAnalysisView`, and a new `DashboardView` (Swift Charts) showing revenue/margin trend lines plus concern/opportunity/hypothesis counts — reads `/projects/{id}/analysis/financial` directly, so it's the same deterministic numbers as everywhere else, not a separate computation.
+
+Two real bugs caught by generating an actual PDF from live Deep Analysis output (not just unit tests) and reading it:
+1. The 90-Day Action Plan and Business Performance tables used plain strings as reportlab `Table` cell content, which does not reliably word-wrap within a fixed column width — long LLM-authored text visibly overlapped adjacent cells. Fixed by wrapping cell content in `Paragraph` flowables, which do wrap. Regression-tested by asserting the cells are `Paragraph` instances, since text-extraction-based PDF tests can't detect visual overlap.
+2. A Strategic Option's `recommendation` field (required `str`, not `Optional`) came back as `""` from the LLM, rendering a blank line that reads as a bug even though it isn't one. Added an `_or_not_stated()` fallback for that field's siblings too.

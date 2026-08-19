@@ -1,15 +1,19 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
-from sqlalchemy.orm import Session
-
+from fastapi.responses import Response
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from src.database.database import get_db
 from src.database.models import Finding
 from src.database.repository import Repository
 from src.ingestion.registry import UnsupportedFileType, parse_document
 from src.llm.router import get_llm_client
+from src.reports.excel_export import generate_excel_export
+from src.reports.pdf_report import generate_pdf_report
+from src.reports.pptx_report import generate_pptx_report
+from src.reports.report_context import ProjectNotFound, build_report_context
 from src.schemas.business_profile import BusinessProfileOut
 from src.schemas.chat import ChatRequest, QuickAnswer
 from src.schemas.company import CompanyCreate, CompanyOut
@@ -305,3 +309,57 @@ def get_deep_analysis_run(run_id: int, repo: Repository = Depends(get_repo)):
     if run is None:
         raise HTTPException(status_code=404, detail="Deep analysis run not found")
     return run
+
+
+# --- professional outputs (spec section 15 Phase 4) -----------------------------
+
+
+def _safe_filename(name: str) -> str:
+    return "".join(c if c.isalnum() or c in " _-" else "_" for c in name).strip().replace(" ", "_") or "report"
+
+
+def _attachment_headers(filename: str) -> dict:
+    return {"Content-Disposition": f'attachment; filename="{filename}"'}
+
+
+@router.get("/projects/{project_id}/reports/pdf")
+def get_pdf_report(project_id: int, repo: Repository = Depends(get_repo)):
+    try:
+        ctx = build_report_context(repo, project_id)
+    except ProjectNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+    filename = f"{_safe_filename(ctx.project.name)}_report.pdf"
+    return Response(
+        content=generate_pdf_report(ctx), media_type="application/pdf", headers=_attachment_headers(filename)
+    )
+
+
+@router.get("/projects/{project_id}/reports/pptx")
+def get_pptx_report(project_id: int, repo: Repository = Depends(get_repo)):
+    try:
+        ctx = build_report_context(repo, project_id)
+    except ProjectNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+    filename = f"{_safe_filename(ctx.project.name)}_report.pptx"
+    return Response(
+        content=generate_pptx_report(ctx),
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        headers=_attachment_headers(filename),
+    )
+
+
+@router.get("/projects/{project_id}/reports/excel")
+def get_excel_export(project_id: int, repo: Repository = Depends(get_repo)):
+    try:
+        ctx = build_report_context(repo, project_id)
+    except ProjectNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+
+    filename = f"{_safe_filename(ctx.project.name)}_analysis.xlsx"
+    return Response(
+        content=generate_excel_export(ctx),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=_attachment_headers(filename),
+    )

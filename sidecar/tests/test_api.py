@@ -242,3 +242,37 @@ def test_business_profile_and_deep_analysis_404_for_unknown_project():
     with TestClient(app) as client:
         assert client.get("/projects/999999/business-profile").status_code == 404
         assert client.get("/projects/999999/deep-analysis").status_code == 404
+
+
+def test_report_export_endpoints():
+    with TestClient(app) as client:
+        company = client.post("/companies", json={"name": "Acme Wine Bar"}).json()
+        project = client.post(f"/companies/{company['id']}/projects", json={"name": "Diagnostic"}).json()
+
+        csv_bytes = b"month,revenue,cogs\nJan,10000,4000\nFeb,10000,7000\n"
+        client.post(
+            f"/projects/{project['id']}/documents",
+            files={"file": ("pnl.csv", io.BytesIO(csv_bytes), "text/csv")},
+        )
+
+        pdf = client.get(f"/projects/{project['id']}/reports/pdf")
+        assert pdf.status_code == 200
+        assert pdf.headers["content-type"] == "application/pdf"
+        assert pdf.content.startswith(b"%PDF")
+
+        pptx = client.get(f"/projects/{project['id']}/reports/pptx")
+        assert pptx.status_code == 200
+        assert "presentationml" in pptx.headers["content-type"]
+        assert len(pptx.content) > 0
+
+        excel = client.get(f"/projects/{project['id']}/reports/excel")
+        assert excel.status_code == 200
+        assert "spreadsheetml" in excel.headers["content-type"]
+        assert len(excel.content) > 0
+
+
+def test_report_export_endpoints_404_for_unknown_project():
+    with TestClient(app) as client:
+        assert client.get("/projects/999999/reports/pdf").status_code == 404
+        assert client.get("/projects/999999/reports/pptx").status_code == 404
+        assert client.get("/projects/999999/reports/excel").status_code == 404

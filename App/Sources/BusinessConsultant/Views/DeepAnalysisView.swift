@@ -45,6 +45,19 @@ struct DeepAnalysisView: View {
                     Button("Close") { dismiss() }
                 }
                 ToolbarItem(placement: .primaryAction) {
+                    if viewModel.isExportingReport {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Menu {
+                            Button("Export PDF…") { Task { await viewModel.exportReport(format: .pdf) } }
+                            Button("Export PowerPoint…") { Task { await viewModel.exportReport(format: .pptx) } }
+                            Button("Export Excel…") { Task { await viewModel.exportReport(format: .excel) } }
+                        } label: {
+                            Label("Export", systemImage: "square.and.arrow.up")
+                        }
+                    }
+                }
+                ToolbarItem(placement: .primaryAction) {
                     if viewModel.isRunningDeepAnalysis {
                         ProgressView().controlSize(.small)
                     } else {

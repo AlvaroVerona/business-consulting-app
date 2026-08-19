@@ -139,6 +139,35 @@ actor SidecarClient {
         try await get("/projects/\(projectId)/deep-analysis")
     }
 
+    // MARK: - financial analysis / reports
+
+    func runFinancialAnalysis(projectId: Int) async throws -> FinancialAnalysis {
+        try await post("/projects/\(projectId)/analysis/financial", body: EmptyBody())
+    }
+
+    enum ReportFormat: String {
+        case pdf, pptx, excel
+
+        var pathExtension: String {
+            switch self {
+            case .pdf: return "pdf"
+            case .pptx: return "pptx"
+            case .excel: return "xlsx"
+            }
+        }
+    }
+
+    func downloadReport(projectId: Int, format: ReportFormat) async throws -> Data {
+        var request = URLRequest(url: baseURL.appendingPathComponent("/projects/\(projectId)/reports/\(format.rawValue)"))
+        request.httpMethod = "GET"
+
+        let (data, response) = try await session.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw SidecarError.server(status: http.statusCode, body: String(data: data, encoding: .utf8) ?? "")
+        }
+        return data
+    }
+
     // MARK: - plumbing
 
     private struct EmptyBody: Encodable {}

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 @MainActor
@@ -78,6 +79,9 @@ final class ProjectViewModel {
     var deepAnalysisRuns: [DeepAnalysisRun] = []
     var isRunningDeepAnalysis = false
 
+    var financialAnalysis: FinancialAnalysis?
+    var isExportingReport = false
+
     private let client = SidecarClient.shared
 
     init(project: Project) {
@@ -107,6 +111,32 @@ final class ProjectViewModel {
             // a business profile, and itself as a side effect — one reload
             // picks up all of it from the authoritative server state.
             await load()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func loadFinancialAnalysis() async {
+        do {
+            financialAnalysis = try await client.runFinancialAnalysis(projectId: project.id)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func exportReport(format: SidecarClient.ReportFormat) async {
+        isExportingReport = true
+        defer { isExportingReport = false }
+
+        do {
+            let data = try await client.downloadReport(projectId: project.id, format: format)
+
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = "\(project.name)_report.\(format.pathExtension)"
+            panel.canCreateDirectories = true
+
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            try data.write(to: url)
         } catch {
             errorMessage = error.localizedDescription
         }

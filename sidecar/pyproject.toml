@@ -12,7 +12,9 @@ dependencies = [
     "ollama",
     "anthropic",
     "python-docx",
+    "python-pptx",
     "pypdf",
+    "reportlab",
     "openpyxl",
     "python-multipart",
 ]
