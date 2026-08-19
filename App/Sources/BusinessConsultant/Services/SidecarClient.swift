@@ -52,6 +52,22 @@ actor SidecarClient {
 
     private init() {}
 
+    // MARK: - health
+
+    /// Used by SidecarLauncher to decide whether it needs to spawn the
+    /// sidecar process at all (it may already be running — started
+    /// manually, or by an earlier launch of this app that's still up).
+    /// Deliberately returns Bool rather than throwing: a connection refused
+    /// is the expected, common case here, not an error to report.
+    func isHealthy() async -> Bool {
+        var request = URLRequest(url: baseURL.appendingPathComponent("/health"))
+        request.httpMethod = "GET"
+        request.timeoutInterval = 1.5
+
+        guard let (_, response) = try? await session.data(for: request) else { return false }
+        return (response as? HTTPURLResponse)?.statusCode == 200
+    }
+
     // MARK: - companies / projects
 
     func listCompanies() async throws -> [Company] {

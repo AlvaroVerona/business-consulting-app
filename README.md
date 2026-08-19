@@ -17,6 +17,8 @@ Hybrid (decided 2026-08-19): local Ollama (`llama3.1`) is the default for every 
 
 ## Running the sidecar
 
+The packaged `.app` (see below) starts this automatically — you only need to run it by hand for sidecar development (`--reload`) or when using `swift run` directly:
+
 ```bash
 cd sidecar
 uv sync
@@ -32,7 +34,7 @@ uv run pytest
 
 ## Running the macOS app
 
-For development (rebuilds on every change, runs from Terminal):
+For development (rebuilds on every change, runs from Terminal — you need the sidecar running separately, see above):
 
 ```bash
 cd App
@@ -47,5 +49,7 @@ cd App
 open .build/app/BusinessConsultant.app          # launch it
 cp -R .build/app/BusinessConsultant.app /Applications/   # or install it
 ```
+
+**The packaged app auto-starts the sidecar** (`SidecarLauncher.swift`): on launch it checks `http://127.0.0.1:8765/health`, and if nothing answers, spawns `uv run uvicorn` itself, pointed at the sidecar's source directory (fixed to `~/Documents/ai_for_business/business-consulting-app/sidecar` by default — override with the `BUSINESS_CONSULTANT_SIDECAR_PATH` env var if the repo lives somewhere else; this is a personal, single-machine tool, not built to auto-locate itself on other systems). It only stops the sidecar it actually spawned when the app quits — one it finds already running (started manually, or by another launch of the app) is left alone. Needs `uv` installed at one of `~/.local/bin/uv`, `/opt/homebrew/bin/uv`, or `/usr/local/bin/uv` — a GUI-launched app doesn't inherit your shell's `PATH`, so it won't find `uv` there even if `which uv` works fine in Terminal.
 
 Ad-hoc signed only (not notarized — that needs an Apple Developer account this project doesn't use), so it's for running on this machine, not for distributing to others.
