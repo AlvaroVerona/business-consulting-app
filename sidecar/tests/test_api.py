@@ -99,3 +99,52 @@ def test_unsupported_file_type_marks_document_failed():
 
         assert upload["status"] == "FAILED"
         assert "No parser registered" in upload["error"]
+
+
+def test_financial_analysis_concerns_and_opportunities_endpoints():
+    with TestClient(app) as client:
+        company = client.post("/companies", json={"name": "Acme Wine Bar"}).json()
+        project = client.post(f"/companies/{company['id']}/projects", json={"name": "Diagnostic"}).json()
+
+        csv_bytes = (
+            b"month,revenue,cogs,opex\n"
+            b"Jan,10000,4000,3000\n"
+            b"Feb,10000,5500,2500\n"
+            b"Mar,10000,7000,2000\n"
+        )
+        client.post(
+            f"/projects/{project['id']}/documents",
+            files={"file": ("pnl.csv", io.BytesIO(csv_bytes), "text/csv")},
+        )
+
+        analysis = client.post(f"/projects/{project['id']}/analysis/financial").json()
+        assert len(analysis["periods"]) == 3
+        assert analysis["gross_margin_trend"] == "declining"
+        assert all(f["origin"] == "engine" for f in analysis["findings"])
+
+        concerns = client.post(f"/projects/{project['id']}/concerns/detect").json()
+        assert any(c["title"] == "Gross margin compression" for c in concerns)
+        assert client.get(f"/projects/{project['id']}/concerns").json() == concerns
+
+        opportunities = client.post(f"/projects/{project['id']}/opportunities/detect").json()
+        assert any(o["title"] == "Operating cost efficiency improving" for o in opportunities)
+        assert client.get(f"/projects/{project['id']}/opportunities").json() == opportunities
+
+
+def test_hypothesis_lifecycle_via_api():
+    with TestClient(app) as client:
+        company = client.post("/companies", json={"name": "Acme"}).json()
+        project = client.post(f"/companies/{company['id']}/projects", json={"name": "P1"}).json()
+
+        created = client.post(
+            f"/projects/{project['id']}/hypotheses",
+            json={"statement": "Supplier price increases drove the COGS trend.", "data_required": "Invoices"},
+        ).json()
+        assert created["status"] == "PLAUSIBLE"
+
+        updated = client.patch(f"/hypotheses/{created['id']}", json={"status": "CONFIRMED"}).json()
+        assert updated["status"] == "CONFIRMED"
+
+        listed = client.get(f"/projects/{project['id']}/hypotheses").json()
+        assert listed[0]["id"] == created["id"]
+        assert listed[0]["status"] == "CONFIRMED"

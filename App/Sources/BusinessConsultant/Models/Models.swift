@@ -68,6 +68,9 @@ struct Finding: Codable, Identifiable, Hashable {
     var citation: Citation
     var calculation: String?
     var assumption: String?
+    /// "engine" (deterministic Python arithmetic) or "llm". See DISCOVERY.md's
+    /// 2026-08-19 note on a real arithmetic error caught in an LLM-computed finding.
+    var origin: String?
 }
 
 struct ChatRequest: Codable {

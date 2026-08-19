@@ -3,7 +3,7 @@ import json
 import pytest
 
 from src.database.repository import Repository
-from src.services.quick_answer_service import QuickAnswerService
+from src.services.quick_answer_service import QuickAnswerService, _build_prior_findings_context
 
 
 class FakeLLM:
@@ -86,6 +86,38 @@ def test_answer_retries_on_fabricated_citation(db_session):
 
     assert llm.calls == 2
     assert result.evidence[0].citation.chunk_id == chunk_id
+
+
+def test_prior_findings_context_does_not_expose_a_conflatable_finding_id(db_session):
+    """Regression test for a live bug: the context used to say
+    "finding_id=9 chunk_id=1 ...", and llama3.1 cited chunk_id=9 (the
+    finding_id) instead of the real chunk_id=1, failing citation validation."""
+    repo, project, document = _seed_project(db_session)
+    chunk_id = repo.list_chunks(project.id)[0].id
+
+    engine_finding = repo.create_finding(
+        project_id=project.id,
+        statement="Gross margin in Jan was 40%.",
+        source_type="CALCULATION",
+        confidence="HIGH",
+        origin="engine",
+        document_id=document.id,
+        chunk_id=chunk_id,
+        calculation="(1000 - 600) / 1000 = 0.40",
+    )
+    repo.create_finding(  # should be excluded: origin="llm" (the default)
+        project_id=project.id,
+        statement="An LLM-derived aside that must not be reused as trustworthy.",
+        source_type="INFERENCE",
+        confidence="LOW",
+    )
+
+    context = _build_prior_findings_context(repo.list_findings(project.id))
+
+    assert "finding_id=" not in context
+    assert f"finding_id={engine_finding.id}" not in context
+    assert f"citation.chunk_id={chunk_id}" in context
+    assert "LLM-derived aside" not in context
 
 
 def test_answer_raises_after_exhausting_retries(db_session):

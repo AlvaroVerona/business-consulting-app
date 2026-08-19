@@ -39,6 +39,25 @@ def test_company_project_document_finding_roundtrip(db_session):
     assert [m.role for m in messages] == ["user", "assistant"]
 
 
+def test_list_chunks_orders_by_document_upload_time_then_position(db_session):
+    """Regression: list_chunks had no ORDER BY, so with two documents in a
+    project, chunk order (and therefore extract_periods' "first"/"last"
+    period) depended on unspecified SQL result order."""
+    repo = Repository(db_session)
+    company = repo.create_company(name="Acme")
+    project = repo.create_project(company.id, name="P1")
+
+    doc_a = repo.create_document(project.id, filename="a.csv", file_type="csv", storage_path="/tmp/a.csv")
+    repo.add_chunks(doc_a.id, [{"content": "a-row-0"}, {"content": "a-row-1"}])
+
+    doc_b = repo.create_document(project.id, filename="b.csv", file_type="csv", storage_path="/tmp/b.csv")
+    repo.add_chunks(doc_b.id, [{"content": "b-row-0"}, {"content": "b-row-1"}])
+
+    contents = [c.content for c in repo.list_chunks(project.id)]
+
+    assert contents == ["a-row-0", "a-row-1", "b-row-0", "b-row-1"]
+
+
 def test_list_projects_scoped_to_company(db_session):
     repo = Repository(db_session)
 
@@ -48,3 +67,58 @@ def test_list_projects_scoped_to_company(db_session):
     repo.create_project(company_b.id, name="B1")
 
     assert [p.name for p in repo.list_projects(company_a.id)] == ["A1"]
+
+
+def test_hypothesis_crud_and_status_update(db_session):
+    repo = Repository(db_session)
+    company = repo.create_company(name="Acme")
+    project = repo.create_project(company.id, name="P1")
+
+    hypothesis = repo.create_hypothesis(
+        project_id=project.id,
+        statement="COGS growth is driven by a supplier price increase.",
+        status="PLAUSIBLE",
+        data_required="Supplier invoices for the period.",
+    )
+    assert hypothesis.supporting_finding_ids == []  # default applied, not None
+
+    updated = repo.update_hypothesis(hypothesis.id, status="CONFIRMED", supporting_finding_ids=[1, 2])
+    assert updated.status == "CONFIRMED"
+    assert updated.supporting_finding_ids == [1, 2]
+
+    assert [h.statement for h in repo.list_hypotheses(project.id)] == [hypothesis.statement]
+
+
+def test_update_hypothesis_can_clear_a_field_to_null(db_session):
+    """Regression: an explicit None used to be silently skipped, so a PATCH
+    intended to clear a field left the old value in place."""
+    repo = Repository(db_session)
+    company = repo.create_company(name="Acme")
+    project = repo.create_project(company.id, name="P1")
+
+    hypothesis = repo.create_hypothesis(
+        project_id=project.id, statement="X", priority="HIGH", data_required="Invoices"
+    )
+
+    cleared = repo.update_hypothesis(hypothesis.id, priority=None)
+
+    assert cleared.priority is None
+    assert cleared.data_required == "Invoices"  # untouched field survives
+
+
+def test_concern_and_opportunity_crud(db_session):
+    repo = Repository(db_session)
+    company = repo.create_company(name="Acme")
+    project = repo.create_project(company.id, name="P1")
+
+    repo.create_concern(project_id=project.id, title="Margin compression", severity="HIGH", confidence="HIGH")
+    assert len(repo.list_concerns(project.id)) == 1
+    repo.clear_concerns(project.id)
+    assert repo.list_concerns(project.id) == []
+
+    repo.create_opportunity(
+        project_id=project.id, title="Cost efficiency", rationale="Opex ratio improving.", confidence="MEDIUM"
+    )
+    assert len(repo.list_opportunities(project.id)) == 1
+    repo.clear_opportunities(project.id)
+    assert repo.list_opportunities(project.id) == []

@@ -1,6 +1,16 @@
 from sqlalchemy.orm import Session
 
-from src.database.models import ChatMessage, Company, Document, DocumentChunk, Finding, Project
+from src.database.models import (
+    ChatMessage,
+    Company,
+    Concern,
+    Document,
+    DocumentChunk,
+    Finding,
+    Hypothesis,
+    Opportunity,
+    Project,
+)
 
 
 class Repository:
@@ -92,10 +102,15 @@ class Repository:
         )
 
     def list_chunks(self, project_id: int) -> list[DocumentChunk]:
+        # Ordered by upload time then in-document position — extract_periods
+        # and QuickAnswerService both assume this is chronological order
+        # (e.g. "first"/"last" period for a trend), which an unordered query
+        # can't guarantee once a project has more than one document.
         return (
             self.db.query(DocumentChunk)
             .join(Document, DocumentChunk.document_id == Document.id)
             .filter(Document.project_id == project_id)
+            .order_by(Document.created_at, Document.id, DocumentChunk.order_index)
             .all()
         )
 
@@ -115,6 +130,87 @@ class Repository:
             .order_by(Finding.created_at.desc())
             .all()
         )
+
+    # --- hypotheses -----------------------------------------------------
+
+    def create_hypothesis(self, project_id: int, **fields) -> Hypothesis:
+        fields.setdefault("supporting_finding_ids", [])
+        fields.setdefault("contradicting_finding_ids", [])
+        hypothesis = Hypothesis(project_id=project_id, **fields)
+        self.db.add(hypothesis)
+        self.db.commit()
+        self.db.refresh(hypothesis)
+        return hypothesis
+
+    def get_hypothesis(self, hypothesis_id: int) -> Hypothesis | None:
+        return self.db.get(Hypothesis, hypothesis_id)
+
+    def update_hypothesis(self, hypothesis_id: int, **fields) -> Hypothesis | None:
+        # Caller (routes.update_hypothesis) already filters to explicitly-set
+        # fields via `model_dump(exclude_unset=True)` — every key present
+        # here, including an explicit None, is an intentional write. Skipping
+        # None here would make it impossible to ever clear a field via PATCH.
+        hypothesis = self.db.get(Hypothesis, hypothesis_id)
+        if hypothesis is None:
+            return None
+        for key, value in fields.items():
+            setattr(hypothesis, key, value)
+        self.db.commit()
+        self.db.refresh(hypothesis)
+        return hypothesis
+
+    def list_hypotheses(self, project_id: int) -> list[Hypothesis]:
+        return (
+            self.db.query(Hypothesis)
+            .filter(Hypothesis.project_id == project_id)
+            .order_by(Hypothesis.created_at.desc())
+            .all()
+        )
+
+    # --- concerns -----------------------------------------------------
+
+    def create_concern(self, project_id: int, **fields) -> Concern:
+        fields.setdefault("evidence_finding_ids", [])
+        fields.setdefault("root_cause_hypothesis_ids", [])
+        concern = Concern(project_id=project_id, **fields)
+        self.db.add(concern)
+        self.db.commit()
+        self.db.refresh(concern)
+        return concern
+
+    def list_concerns(self, project_id: int) -> list[Concern]:
+        return (
+            self.db.query(Concern)
+            .filter(Concern.project_id == project_id)
+            .order_by(Concern.created_at.desc())
+            .all()
+        )
+
+    def clear_concerns(self, project_id: int) -> None:
+        self.db.query(Concern).filter(Concern.project_id == project_id).delete()
+        self.db.commit()
+
+    # --- opportunities --------------------------------------------------
+
+    def create_opportunity(self, project_id: int, **fields) -> Opportunity:
+        fields.setdefault("evidence_finding_ids", [])
+        opportunity = Opportunity(project_id=project_id, **fields)
+        self.db.add(opportunity)
+        self.db.commit()
+        self.db.refresh(opportunity)
+        return opportunity
+
+    def list_opportunities(self, project_id: int) -> list[Opportunity]:
+        return (
+            self.db.query(Opportunity)
+            .filter(Opportunity.project_id == project_id)
+            .order_by(Opportunity.created_at.desc())
+            .all()
+        )
+
+    def clear_opportunities(self, project_id: int) -> None:
+        self.db.query(Opportunity).filter(Opportunity.project_id == project_id).delete()
+        self.db.commit()
 
     # --- chat ---------------------------------------------------------
 

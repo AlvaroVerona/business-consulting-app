@@ -38,6 +38,7 @@ class FindingOut(BaseModel):
     citation: Citation
     calculation: str | None = None
     assumption: str | None = None
+    origin: str = "llm"
 
     model_config = {"from_attributes": True}
 

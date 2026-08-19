@@ -1,6 +1,6 @@
 import logging
 
-from src.database.models import DocumentChunk
+from src.database.models import DocumentChunk, Finding
 from src.database.repository import Repository
 from src.llm.base import LLMClient
 from src.llm.json_utils import extract_json
@@ -33,9 +33,15 @@ RULES:
 - If the evidence context is empty or insufficient to answer, say so plainly in "answer" and
   list what's missing in "missing_information" — do not fabricate an answer.
 - Use HIGH/MEDIUM/LOW/UNKNOWN for confidence — never a numeric percentage.
+- ALREADY-COMPUTED FINDINGS below were computed by deterministic code, not a language model —
+  they are more reliable than arithmetic you do yourself. If one answers part of the question,
+  reuse its exact number and cite the same chunk_id/document_id rather than recomputing it.
 
 EVIDENCE CONTEXT (each item: chunk_id, document_id, filename, location, content):
 {context}
+
+ALREADY-COMPUTED FINDINGS (deterministic, trustworthy — reuse rather than recompute):
+{prior_findings}
 
 QUESTION:
 {question}
@@ -77,6 +83,29 @@ def _build_context(chunks: list[DocumentChunk]) -> str:
     return "\n".join(lines)
 
 
+def _build_prior_findings_context(findings: list[Finding]) -> str:
+    # Only findings from a deterministic engine (origin="engine") are worth
+    # surfacing here — reusing an earlier LLM-generated CALCULATION would
+    # just propagate whatever arithmetic error it already made.
+    engine_findings = [f for f in findings if f.origin == "engine"]
+
+    if not engine_findings:
+        return "(none yet — run financial analysis for this project to populate this)"
+
+    # Deliberately omits the Finding's own id: it's not a citable chunk_id,
+    # and listing it next to chunk_id/document_id invites the LLM to conflate
+    # the two (reproduced live: it cited a finding_id as a citation.chunk_id).
+    lines = []
+    for f in engine_findings[:MAX_CONTEXT_CHUNKS]:
+        lines.append(
+            f"- statement={f.statement}"
+            + (f" calculation={f.calculation}" if f.calculation else "")
+            + f" | if you cite this, use citation.chunk_id={f.chunk_id} citation.document_id={f.document_id}"
+        )
+
+    return "\n".join(lines)
+
+
 class QuickAnswerService:
     def __init__(self, repo: Repository, llm: LLMClient):
         self.repo = repo
@@ -87,6 +116,7 @@ class QuickAnswerService:
         valid_chunk_ids = {c.id for c in chunks}
         valid_document_ids = {c.document_id for c in chunks}
         context = _build_context(chunks)
+        prior_findings_context = _build_prior_findings_context(self.repo.list_findings(project_id))
 
         last_error = ""
         draft: QuickAnswerDraft | None = None
@@ -96,6 +126,7 @@ class QuickAnswerService:
 
             prompt = PROMPT_TEMPLATE.format(
                 context=context,
+                prior_findings=prior_findings_context,
                 question=question,
                 error_block=f"PREVIOUS ATTEMPT FAILED, FIX THIS: {last_error}" if last_error else "",
             )
@@ -141,6 +172,7 @@ class QuickAnswerService:
                     ),
                     calculation=finding.calculation,
                     assumption=finding.assumption,
+                    origin=finding.origin,
                 )
             )
 

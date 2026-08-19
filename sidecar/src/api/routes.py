@@ -4,16 +4,37 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
 from src.database.database import get_db
+from src.database.models import Finding
 from src.database.repository import Repository
 from src.ingestion.registry import UnsupportedFileType, parse_document
 from src.llm.router import get_llm_client
 from src.schemas.chat import ChatRequest, QuickAnswer
 from src.schemas.company import CompanyCreate, CompanyOut
+from src.schemas.concern import ConcernOut
 from src.schemas.document import DocumentOut
 from src.schemas.evidence import Citation, FindingOut
+from src.schemas.financial import FinancialAnalysisOut, PeriodMetricsOut
+from src.schemas.hypothesis import HypothesisCreate, HypothesisOut, HypothesisUpdate
+from src.schemas.opportunity import OpportunityOut
 from src.schemas.project import ProjectCreate, ProjectOut
+from src.services.concern_detection_service import ConcernDetectionService
+from src.services.financial_analysis_service import FinancialAnalysisService
+from src.services.opportunity_detection_service import OpportunityDetectionService
 from src.services.quick_answer_service import QuickAnswerService
 from src.storage import extension_of, save_upload
+
+
+def _finding_to_out(f: Finding) -> FindingOut:
+    return FindingOut(
+        id=f.id,
+        statement=f.statement,
+        source_type=f.source_type,
+        confidence=f.confidence,
+        citation=Citation(document_id=f.document_id, chunk_id=f.chunk_id, location=f.location),
+        calculation=f.calculation,
+        assumption=f.assumption,
+        origin=f.origin,
+    )
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -94,18 +115,108 @@ def list_documents(project_id: int, repo: Repository = Depends(get_repo)):
 
 @router.get("/projects/{project_id}/findings", response_model=list[FindingOut])
 def list_findings(project_id: int, repo: Repository = Depends(get_repo)):
-    return [
-        FindingOut(
-            id=f.id,
-            statement=f.statement,
-            source_type=f.source_type,
-            confidence=f.confidence,
-            citation=Citation(document_id=f.document_id, chunk_id=f.chunk_id, location=f.location),
-            calculation=f.calculation,
-            assumption=f.assumption,
-        )
-        for f in repo.list_findings(project_id)
-    ]
+    return [_finding_to_out(f) for f in repo.list_findings(project_id)]
+
+
+# --- financial analysis (deterministic engine, spec section 13) ----------------
+
+
+@router.post("/projects/{project_id}/analysis/financial", response_model=FinancialAnalysisOut)
+def run_financial_analysis(project_id: int, repo: Repository = Depends(get_repo)):
+    if repo.get_project(project_id) is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    result = FinancialAnalysisService(repo).run(project_id)
+
+    return FinancialAnalysisOut(
+        periods=[
+            PeriodMetricsOut(
+                period=p.period,
+                revenue=p.revenue,
+                cogs=p.cogs,
+                opex=p.opex,
+                ebitda=p.ebitda,
+                ebitda_is_implied=p.ebitda_is_implied,
+                gross_margin=p.gross_margin,
+                ebitda_margin=p.ebitda_margin,
+                opex_ratio=p.opex_ratio,
+            )
+            for p in result.periods
+        ],
+        revenue_trend=result.revenue_trend,
+        gross_margin_trend=result.gross_margin_trend,
+        ebitda_margin_trend=result.ebitda_margin_trend,
+        findings=[_finding_to_out(f) for f in result.findings],
+    )
+
+
+# --- hypotheses (spec section 4) ------------------------------------------------
+
+
+@router.post("/projects/{project_id}/hypotheses", response_model=HypothesisOut)
+def create_hypothesis(project_id: int, payload: HypothesisCreate, repo: Repository = Depends(get_repo)):
+    if repo.get_project(project_id) is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    return repo.create_hypothesis(
+        project_id=project_id,
+        statement=payload.statement,
+        status=payload.status.value,
+        supporting_finding_ids=payload.supporting_finding_ids,
+        contradicting_finding_ids=payload.contradicting_finding_ids,
+        data_required=payload.data_required,
+        business_impact=payload.business_impact,
+        priority=payload.priority,
+        next_test=payload.next_test,
+    )
+
+
+@router.get("/projects/{project_id}/hypotheses", response_model=list[HypothesisOut])
+def list_hypotheses(project_id: int, repo: Repository = Depends(get_repo)):
+    return repo.list_hypotheses(project_id)
+
+
+@router.patch("/hypotheses/{hypothesis_id}", response_model=HypothesisOut)
+def update_hypothesis(hypothesis_id: int, payload: HypothesisUpdate, repo: Repository = Depends(get_repo)):
+    if repo.get_hypothesis(hypothesis_id) is None:
+        raise HTTPException(status_code=404, detail="Hypothesis not found")
+
+    fields = payload.model_dump(exclude_unset=True)
+    if "status" in fields and fields["status"] is not None:
+        fields["status"] = payload.status.value
+
+    return repo.update_hypothesis(hypothesis_id, **fields)
+
+
+# --- concerns / opportunities (spec section 4) ----------------------------------
+
+
+@router.post("/projects/{project_id}/concerns/detect", response_model=list[ConcernOut])
+def detect_concerns(project_id: int, repo: Repository = Depends(get_repo)):
+    if repo.get_project(project_id) is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    analysis = FinancialAnalysisService(repo).run(project_id)
+    return ConcernDetectionService(repo).run(project_id, analysis)
+
+
+@router.get("/projects/{project_id}/concerns", response_model=list[ConcernOut])
+def list_concerns(project_id: int, repo: Repository = Depends(get_repo)):
+    return repo.list_concerns(project_id)
+
+
+@router.post("/projects/{project_id}/opportunities/detect", response_model=list[OpportunityOut])
+def detect_opportunities(project_id: int, repo: Repository = Depends(get_repo)):
+    if repo.get_project(project_id) is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    analysis = FinancialAnalysisService(repo).run(project_id)
+    return OpportunityDetectionService(repo).run(project_id, analysis)
+
+
+@router.get("/projects/{project_id}/opportunities", response_model=list[OpportunityOut])
+def list_opportunities(project_id: int, repo: Repository = Depends(get_repo)):
+    return repo.list_opportunities(project_id)
 
 
 # --- chat (Quick Answer mode) --------------------------------------------------

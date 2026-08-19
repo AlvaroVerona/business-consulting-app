@@ -48,6 +48,9 @@ class Project(Base):
     company = relationship("Company", back_populates="projects")
     documents = relationship("Document", back_populates="project", cascade="all, delete-orphan")
     findings = relationship("Finding", back_populates="project", cascade="all, delete-orphan")
+    hypotheses = relationship("Hypothesis", back_populates="project", cascade="all, delete-orphan")
+    concerns = relationship("Concern", back_populates="project", cascade="all, delete-orphan")
+    opportunities = relationship("Opportunity", back_populates="project", cascade="all, delete-orphan")
     chat_messages = relationship(
         "ChatMessage",
         back_populates="project",
@@ -113,6 +116,11 @@ class Finding(Base):
     source_type = Column(String, nullable=False)
     confidence = Column(String, nullable=False, default="UNKNOWN")
 
+    # "llm" (QuickAnswerService) or "engine" (a deterministic analysis service,
+    # e.g. FinancialAnalysisService) — lets prompts prefer engine-computed
+    # numbers over asking the LLM to recompute them (see quick_answer_service).
+    origin = Column(String, nullable=False, default="llm")
+
     document_id = Column(Integer, ForeignKey("documents.id", ondelete="SET NULL"), nullable=True)
     chunk_id = Column(Integer, ForeignKey("document_chunks.id", ondelete="SET NULL"), nullable=True)
     location = Column(JSON, nullable=True)
@@ -121,6 +129,76 @@ class Finding(Base):
     assumption = Column(Text, nullable=True)
 
     project = relationship("Project", back_populates="findings")
+
+
+class Hypothesis(Base):
+    """Spec section 4. Generation (a Hypothesis Manager agent proposing these
+    from findings) is deferred to Phase 3's orchestration — this is the
+    tracking data model: status, evidence links, what would move it forward."""
+
+    __tablename__ = "hypotheses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
+
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    statement = Column(Text, nullable=False)
+    status = Column(String, nullable=False, default="PLAUSIBLE")
+
+    supporting_finding_ids = Column(JSON, nullable=True)
+    contradicting_finding_ids = Column(JSON, nullable=True)
+    data_required = Column(Text, nullable=True)
+    business_impact = Column(Text, nullable=True)
+    priority = Column(String, nullable=True)
+    next_test = Column(Text, nullable=True)
+
+    project = relationship("Project", back_populates="hypotheses")
+
+
+class Concern(Base):
+    """Spec section 4, Concern Detection. Persisted output of a detector —
+    currently the deterministic rule-based one in
+    services/concern_detection_service.py, run over FinancialAnalysisService's
+    output."""
+
+    __tablename__ = "concerns"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String, nullable=False)
+    severity = Column(String, nullable=False)
+    evidence_finding_ids = Column(JSON, nullable=True)
+    business_impact = Column(Text, nullable=True)
+    root_cause_hypothesis_ids = Column(JSON, nullable=True)
+    confidence = Column(String, nullable=False, default="UNKNOWN")
+    what_would_change_conclusion = Column(Text, nullable=True)
+    recommended_action = Column(Text, nullable=True)
+
+    project = relationship("Project", back_populates="concerns")
+
+
+class Opportunity(Base):
+    """Spec section 4, Opportunity Detection — same status as Concern above."""
+
+    __tablename__ = "opportunities"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String, nullable=False)
+    rationale = Column(Text, nullable=False)
+    evidence_finding_ids = Column(JSON, nullable=True)
+    estimated_value = Column(Text, nullable=True)
+    required_capabilities = Column(Text, nullable=True)
+    risks = Column(Text, nullable=True)
+    confidence = Column(String, nullable=False, default="UNKNOWN")
+    next_step = Column(Text, nullable=True)
+
+    project = relationship("Project", back_populates="opportunities")
 
 
 class ChatMessage(Base):

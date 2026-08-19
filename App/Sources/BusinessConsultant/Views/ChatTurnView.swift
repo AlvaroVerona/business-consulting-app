@@ -84,6 +84,11 @@ private struct FindingRow: View {
             HStack(spacing: 6) {
                 SourceTypeBadge(sourceType: finding.sourceType)
                 ConfidenceBadge(confidence: finding.confidence)
+                if finding.origin == "engine" {
+                    Label("Engine-computed", systemImage: "checkmark.seal.fill")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.teal)
+                }
                 Spacer()
             }
 
