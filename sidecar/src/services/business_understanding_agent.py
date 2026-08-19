@@ -1,14 +1,10 @@
-import logging
-
 from src.database.models import BusinessProfile
 from src.database.repository import Repository
 from src.llm.base import LLMClient
-from src.llm.json_utils import extract_json
+from src.llm.retry import generate_json_with_retry
 from src.schemas.business_profile import BusinessProfileDraft
 from src.services.context_builder import build_chunk_context
 from src.services.evidence_validation import validate_evidence_citations
-
-logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 2
 
@@ -80,30 +76,18 @@ class BusinessUnderstandingAgent:
         valid_document_ids = {c.document_id for c in chunks}
         context = build_chunk_context(chunks)
 
-        last_error = ""
-        draft: BusinessProfileDraft | None = None
+        def parse(data: dict) -> BusinessProfileDraft:
+            candidate = BusinessProfileDraft(**data)
+            validate_evidence_citations(candidate.evidence, valid_chunk_ids, valid_document_ids)
+            return candidate
 
-        for attempt in range(MAX_RETRIES + 1):
-            logger.info("BusinessUnderstanding attempt %d/%d", attempt + 1, MAX_RETRIES + 1)
-
-            prompt = PROMPT_TEMPLATE.format(
-                context=context,
-                error_block=f"PREVIOUS ATTEMPT FAILED, FIX THIS: {last_error}" if last_error else "",
-            )
-            raw = self.llm.generate(prompt)
-
-            try:
-                data = extract_json(raw)
-                candidate = BusinessProfileDraft(**data)
-                validate_evidence_citations(candidate.evidence, valid_chunk_ids, valid_document_ids)
-                draft = candidate
-                break
-            except Exception as e:  # noqa: BLE001 — feed any failure back as retry context
-                logger.warning("BusinessUnderstanding parse/validation error: %s", e)
-                last_error = str(e)
-
-        if draft is None:
-            raise ValueError(f"BusinessUnderstanding failed after retries. Last error: {last_error}")
+        draft = generate_json_with_retry(
+            self.llm,
+            label="BusinessUnderstanding",
+            max_retries=MAX_RETRIES,
+            build_prompt=lambda error_block: PROMPT_TEMPLATE.format(context=context, error_block=error_block),
+            parse=parse,
+        )
 
         finding_ids = []
         for item in draft.evidence:

@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     ForeignKey,
@@ -54,6 +55,7 @@ class Project(Base):
     business_profiles = relationship("BusinessProfile", back_populates="project", cascade="all, delete-orphan")
     deep_analysis_runs = relationship("DeepAnalysisRun", back_populates="project", cascade="all, delete-orphan")
     monitoring_events = relationship("MonitoringEvent", back_populates="project", cascade="all, delete-orphan")
+    issue_trees = relationship("IssueTree", back_populates="project", cascade="all, delete-orphan")
     chat_messages = relationship(
         "ChatMessage",
         back_populates="project",
@@ -285,6 +287,54 @@ class MonitoringEvent(Base):
     new_value = Column(String, nullable=True)
 
     project = relationship("Project", back_populates="monitoring_events")
+
+
+class IssueTree(Base):
+    """Spec section 4, Issue Trees / Deep Analysis mode step 4. A MECE-where-
+    possible decomposition of a user-defined question — deliberately NOT
+    auto-triggered from a detected Concern's title, since spec section 2's
+    workflow treats "define the key question" (step 3) as its own deliberate
+    step before building the tree (step 4); guessing a question from a
+    concern title would produce a weaker tree than one the user actually
+    means to investigate. Nodes are stored flat (IssueNode.parent_id) and
+    reassembled into the nested shape by services/issue_tree_service.py."""
+
+    __tablename__ = "issue_trees"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    question = Column(Text, nullable=False)
+    overall_note = Column(Text, nullable=True)
+
+    project = relationship("Project", back_populates="issue_trees")
+    nodes = relationship(
+        "IssueNode",
+        back_populates="tree",
+        cascade="all, delete-orphan",
+        order_by="IssueNode.order_index",
+    )
+
+
+class IssueNode(Base):
+    """One branch of an IssueTree. `is_forced_mece` + `overlap_note` are the
+    spec's explicit escape hatch (section 4): "Do not force MECE structures
+    where the underlying business reality does not support them. Explicitly
+    flag overlap or uncertainty" — most nodes should NOT need these set."""
+
+    __tablename__ = "issue_nodes"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    tree_id = Column(Integer, ForeignKey("issue_trees.id", ondelete="CASCADE"), nullable=False, index=True)
+    parent_id = Column(Integer, ForeignKey("issue_nodes.id", ondelete="CASCADE"), nullable=True, index=True)
+    label = Column(String, nullable=False)
+    order_index = Column(Integer, nullable=False)
+    is_forced_mece = Column(Boolean, nullable=False, default=False)
+    overlap_note = Column(Text, nullable=True)
+
+    tree = relationship("IssueTree", back_populates="nodes")
 
 
 class ChatMessage(Base):

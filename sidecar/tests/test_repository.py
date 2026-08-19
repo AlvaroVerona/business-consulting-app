@@ -152,3 +152,29 @@ def test_list_opportunities_prioritized_by_confidence(db_session):
 
     titles = [o.title for o in repo.list_opportunities(project.id)]
     assert titles == ["High", "Medium", "Low"]
+
+
+def test_list_issue_nodes_for_project_groups_correctly_across_multiple_trees(db_session):
+    """Regression: the API route used to call list_issue_nodes once per tree
+    (N+1) — this is the batched replacement, one query for every node across
+    every tree in the project, which the route then groups in Python."""
+    repo = Repository(db_session)
+    company = repo.create_company(name="Acme")
+    project = repo.create_project(company.id, name="P1")
+
+    tree_a = repo.create_issue_tree(project_id=project.id, question="Why did revenue decline?")
+    node_a = repo.create_issue_node(tree_id=tree_a.id, parent_id=None, label="Price", order_index=0)
+    repo.commit()
+
+    tree_b = repo.create_issue_tree(project_id=project.id, question="Why did EBITDA decline?")
+    node_b = repo.create_issue_node(tree_id=tree_b.id, parent_id=None, label="Costs", order_index=0)
+    repo.commit()
+
+    all_nodes = repo.list_issue_nodes_for_project(project.id)
+
+    assert {n.id for n in all_nodes} == {node_a.id, node_b.id}
+    by_tree: dict[int, list] = {}
+    for n in all_nodes:
+        by_tree.setdefault(n.tree_id, []).append(n)
+    assert [n.label for n in by_tree[tree_a.id]] == ["Price"]
+    assert [n.label for n in by_tree[tree_b.id]] == ["Costs"]

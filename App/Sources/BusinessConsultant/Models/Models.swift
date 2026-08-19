@@ -313,3 +313,31 @@ struct MonitoringEvent: Codable, Identifiable, Hashable {
     var newValue: String?
     let createdAt: Date
 }
+
+// MARK: - Issue trees (spec section 4 / MVP DoD #6)
+
+struct IssueNode: Codable, Identifiable, Hashable, Sendable {
+    let id: Int
+    var label: String
+    var isForcedMece: Bool
+    var overlapNote: String?
+    var children: [IssueNode]
+
+    /// For SwiftUI's `OutlineGroup(children:)`, which expects nil (not an
+    /// empty array) to mean "leaf, no disclosure triangle".
+    var nonEmptyChildren: [IssueNode]? { children.isEmpty ? nil : children }
+}
+
+struct IssueTree: Codable, Identifiable, Hashable, Sendable {
+    let id: Int
+    var projectId: Int
+    var question: String
+    var overallNote: String?
+    var rootChildren: [IssueNode]
+    let createdAt: Date
+}
+
+struct IssueTreeRequest: Codable {
+    var question: String
+    var useClaude: Bool = false
+}

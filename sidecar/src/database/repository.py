@@ -12,6 +12,8 @@ from src.database.models import (
     DocumentChunk,
     Finding,
     Hypothesis,
+    IssueNode,
+    IssueTree,
     MonitoringEvent,
     Opportunity,
     Project,
@@ -324,6 +326,78 @@ class Repository:
             self.db.query(MonitoringEvent)
             .filter(MonitoringEvent.project_id == project_id)
             .order_by(MonitoringEvent.created_at.desc())
+            .all()
+        )
+
+    # --- issue trees ----------------------------------------------------
+
+    def create_issue_tree(self, project_id: int, question: str, overall_note: str | None = None) -> IssueTree:
+        # flush, not commit: IssueTreeService persists a whole tree (root ->
+        # every descendant) across many create_issue_node calls and commits
+        # once at the end via Repository.commit() — every other create_*
+        # method in this file commits immediately because it persists one
+        # independent row, but doing that here would let a failure partway
+        # through a tree leave a permanently truncated one durably saved,
+        # with no way to detect or repair it.
+        tree = IssueTree(project_id=project_id, question=question, overall_note=overall_note)
+        self.db.add(tree)
+        self.db.flush()
+        self.db.refresh(tree)
+        return tree
+
+    def create_issue_node(self, tree_id: int, **fields) -> IssueNode:
+        # flush, not commit — see create_issue_tree. A child node's parent_id
+        # needs its parent's id, which flush() assigns without ending the
+        # transaction (unlike commit()).
+        node = IssueNode(tree_id=tree_id, **fields)
+        self.db.add(node)
+        self.db.flush()
+        self.db.refresh(node)
+        return node
+
+    def commit(self) -> None:
+        """Explicit transaction boundary for callers building something out
+        of several create_* calls that must land atomically — currently only
+        IssueTreeService. Every other repository method commits per-call."""
+        self.db.commit()
+
+    def rollback(self) -> None:
+        """Pairs with commit(): a flushed-but-uncommitted row is still
+        visible to queries on this same session (flush pushes SQL into the
+        current transaction; only commit/rollback ends it), so a caller that
+        fails partway through a multi-call transaction must roll back
+        explicitly, not just skip calling commit()."""
+        self.db.rollback()
+
+    def get_issue_tree(self, tree_id: int) -> IssueTree | None:
+        return self.db.get(IssueTree, tree_id)
+
+    def list_issue_nodes(self, tree_id: int) -> list[IssueNode]:
+        return (
+            self.db.query(IssueNode)
+            .filter(IssueNode.tree_id == tree_id)
+            .order_by(IssueNode.order_index)
+            .all()
+        )
+
+    def list_issue_trees(self, project_id: int) -> list[IssueTree]:
+        return (
+            self.db.query(IssueTree)
+            .filter(IssueTree.project_id == project_id)
+            .order_by(IssueTree.created_at.desc())
+            .all()
+        )
+
+    def list_issue_nodes_for_project(self, project_id: int) -> list[IssueNode]:
+        """All nodes across every tree in one query — issue trees accumulate
+        (never clear-and-replace, unlike Concern/Opportunity), so a project
+        with many trees would otherwise need one list_issue_nodes call per
+        tree just to render a list."""
+        return (
+            self.db.query(IssueNode)
+            .join(IssueTree, IssueNode.tree_id == IssueTree.id)
+            .filter(IssueTree.project_id == project_id)
+            .order_by(IssueNode.order_index)
             .all()
         )
 

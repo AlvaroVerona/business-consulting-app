@@ -357,3 +357,58 @@ def test_monitoring_events_endpoint():
 def test_monitoring_events_404_for_unknown_project():
     with TestClient(app) as client:
         assert client.get("/projects/999999/monitoring/events").status_code == 404
+
+
+def _issue_tree_json() -> str:
+    return json.dumps(
+        {
+            "root_children": [
+                {
+                    "label": "Revenue",
+                    "is_forced_mece": False,
+                    "overlap_note": None,
+                    "children": [
+                        {"label": "Price", "is_forced_mece": False, "overlap_note": None, "children": []},
+                        {"label": "Volume", "is_forced_mece": False, "overlap_note": None, "children": []},
+                    ],
+                },
+                {"label": "Costs", "is_forced_mece": False, "overlap_note": None, "children": []},
+            ],
+            "overall_note": None,
+        }
+    )
+
+
+def test_issue_tree_endpoints(monkeypatch):
+    with TestClient(app) as client:
+        company = client.post("/companies", json={"name": "Acme"}).json()
+        project = client.post(f"/companies/{company['id']}/projects", json={"name": "P1"}).json()
+
+        monkeypatch.setattr(routes_module, "get_llm_client", lambda use_claude=False: FakeLLMSequence([_issue_tree_json()]))
+
+        created = client.post(
+            f"/projects/{project['id']}/issue-trees",
+            json={"question": "Why did EBITDA decline?"},
+        ).json()
+        assert created["question"] == "Why did EBITDA decline?"
+        assert len(created["root_children"]) == 2
+        assert created["root_children"][0]["label"] == "Revenue"
+        assert len(created["root_children"][0]["children"]) == 2
+
+        fetched = client.get(f"/issue-trees/{created['id']}").json()
+        assert fetched["id"] == created["id"]
+
+        listed = client.get(f"/projects/{project['id']}/issue-trees").json()
+        assert len(listed) == 1
+
+
+def test_issue_tree_endpoints_404_for_unknown_project():
+    with TestClient(app) as client:
+        response = client.post("/projects/999999/issue-trees", json={"question": "Why?"})
+        assert response.status_code == 404
+        assert client.get("/projects/999999/issue-trees").status_code == 404
+
+
+def test_get_issue_tree_404_for_unknown_id():
+    with TestClient(app) as client:
+        assert client.get("/issue-trees/999999").status_code == 404

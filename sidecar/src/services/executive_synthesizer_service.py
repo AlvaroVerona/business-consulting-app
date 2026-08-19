@@ -1,12 +1,8 @@
-import logging
-
 from src.database.models import BusinessProfile, Concern, Hypothesis, Opportunity
 from src.llm.base import LLMClient
-from src.llm.json_utils import extract_json
+from src.llm.retry import generate_json_with_retry
 from src.schemas.deep_analysis import ExecutiveSynthesisDraft, QualityIssue
 from src.services.financial_analysis_service import FinancialAnalysisResult
-
-logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 2
 
@@ -185,31 +181,26 @@ class ExecutiveSynthesizerService:
         hypotheses_text = _format_hypotheses(hypotheses)
         quality_issues_text = _format_quality_issues(quality_issues)
 
-        last_error = ""
-        for attempt in range(MAX_RETRIES + 1):
-            logger.info("ExecutiveSynthesizer attempt %d/%d", attempt + 1, MAX_RETRIES + 1)
+        def parse(data: dict) -> ExecutiveSynthesisDraft:
+            draft = ExecutiveSynthesisDraft(**data)
+            self._validate_ids(draft, valid_concern_ids, valid_opportunity_ids)
+            return draft
 
-            prompt = PROMPT_TEMPLATE.format(
+        return generate_json_with_retry(
+            self.llm,
+            label="ExecutiveSynthesizer",
+            max_retries=MAX_RETRIES,
+            build_prompt=lambda error_block: PROMPT_TEMPLATE.format(
                 business_profile=business_profile_text,
                 financial_summary=financial_summary_text,
                 concerns=concerns_text,
                 opportunities=opportunities_text,
                 hypotheses=hypotheses_text,
                 quality_issues=quality_issues_text,
-                error_block=f"PREVIOUS ATTEMPT FAILED, FIX THIS: {last_error}" if last_error else "",
-            )
-            raw = self.llm.generate(prompt)
-
-            try:
-                data = extract_json(raw)
-                draft = ExecutiveSynthesisDraft(**data)
-                self._validate_ids(draft, valid_concern_ids, valid_opportunity_ids)
-                return draft
-            except Exception as e:  # noqa: BLE001 — feed any failure back as retry context
-                logger.warning("ExecutiveSynthesizer parse/validation error: %s", e)
-                last_error = str(e)
-
-        raise ValueError(f"ExecutiveSynthesizer failed after retries. Last error: {last_error}")
+                error_block=error_block,
+            ),
+            parse=parse,
+        )
 
     @staticmethod
     def _validate_ids(draft: ExecutiveSynthesisDraft, valid_concern_ids: set[int], valid_opportunity_ids: set[int]) -> None:

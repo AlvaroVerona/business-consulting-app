@@ -3,7 +3,7 @@ import logging
 from src.database.models import Concern, Hypothesis
 from src.database.repository import Repository
 from src.llm.base import LLMClient
-from src.llm.json_utils import extract_json
+from src.llm.retry import generate_json_with_retry
 from src.schemas.hypothesis_manager import HypothesisBatchDraft, HypothesisDraft
 
 logger = logging.getLogger(__name__)
@@ -97,25 +97,22 @@ class HypothesisManagerAgent:
         return created
 
     def _generate_for_concern(self, concern: Concern) -> list[HypothesisDraft]:
-        last_error = ""
-
-        for attempt in range(MAX_RETRIES + 1):
-            logger.info("HypothesisManager attempt %d/%d for concern %d", attempt + 1, MAX_RETRIES + 1, concern.id)
-
-            prompt = PROMPT_TEMPLATE.format(
-                title=concern.title,
-                business_impact=concern.business_impact or "(not stated)",
-                what_would_change_conclusion=concern.what_would_change_conclusion or "(not stated)",
-                error_block=f"PREVIOUS ATTEMPT FAILED, FIX THIS: {last_error}" if last_error else "",
+        # Tolerates exhausting retries for one concern (returns [] instead of
+        # raising) so one weak LLM moment doesn't block hypothesis generation
+        # for every other concern in the same run.
+        try:
+            return generate_json_with_retry(
+                self.llm,
+                label=f"HypothesisManager(concern={concern.id})",
+                max_retries=MAX_RETRIES,
+                build_prompt=lambda error_block: PROMPT_TEMPLATE.format(
+                    title=concern.title,
+                    business_impact=concern.business_impact or "(not stated)",
+                    what_would_change_conclusion=concern.what_would_change_conclusion or "(not stated)",
+                    error_block=error_block,
+                ),
+                parse=lambda data: HypothesisBatchDraft(**data).hypotheses,
             )
-            raw = self.llm.generate(prompt)
-
-            try:
-                data = extract_json(raw)
-                return HypothesisBatchDraft(**data).hypotheses
-            except Exception as e:  # noqa: BLE001 — feed any failure back as retry context
-                logger.warning("HypothesisManager parse error for concern %d: %s", concern.id, e)
-                last_error = str(e)
-
-        logger.warning("HypothesisManager gave up on concern %d after retries: %s", concern.id, last_error)
-        return []
+        except ValueError as e:
+            logger.warning("HypothesisManager gave up on concern %d after retries: %s", concern.id, e)
+            return []

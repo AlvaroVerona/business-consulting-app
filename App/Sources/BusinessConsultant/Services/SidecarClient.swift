@@ -178,6 +178,16 @@ actor SidecarClient {
         try await get("/projects/\(projectId)/monitoring/events")
     }
 
+    // MARK: - issue trees
+
+    func createIssueTree(projectId: Int, question: String, useClaude: Bool = false) async throws -> IssueTree {
+        try await post("/projects/\(projectId)/issue-trees", body: IssueTreeRequest(question: question, useClaude: useClaude))
+    }
+
+    func listIssueTrees(projectId: Int) async throws -> [IssueTree] {
+        try await get("/projects/\(projectId)/issue-trees")
+    }
+
     // MARK: - plumbing
 
     private struct EmptyBody: Encodable {}

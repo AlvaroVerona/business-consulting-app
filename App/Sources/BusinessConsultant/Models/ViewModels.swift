@@ -87,6 +87,10 @@ final class ProjectViewModel {
     var scenarioResult: ScenarioResult?
     var isRunningScenario = false
 
+    var issueTrees: [IssueTree] = []
+    var pendingIssueTreeQuestion: String = ""
+    var isBuildingIssueTree = false
+
     private let client = SidecarClient.shared
 
     init(project: Project) {
@@ -95,8 +99,8 @@ final class ProjectViewModel {
 
     func load() async {
         do {
-            // These 8 reads are independent — running them concurrently
-            // instead of one-after-another saves 7 round-trips' worth of
+            // These 9 reads are independent — running them concurrently
+            // instead of one-after-another saves 8 round-trips' worth of
             // latency on every workspace load.
             async let documentsTask = client.listDocuments(projectId: project.id)
             async let concernsTask = client.listConcerns(projectId: project.id)
@@ -106,11 +110,12 @@ final class ProjectViewModel {
             async let businessProfileTask = client.getBusinessProfile(projectId: project.id)
             async let deepAnalysisRunsTask = client.listDeepAnalysisRuns(projectId: project.id)
             async let monitoringEventsTask = client.listMonitoringEvents(projectId: project.id)
+            async let issueTreesTask = client.listIssueTrees(projectId: project.id)
 
-            (documents, concerns, opportunities, hypotheses, findings, businessProfile, deepAnalysisRuns, monitoringEvents) =
+            (documents, concerns, opportunities, hypotheses, findings, businessProfile, deepAnalysisRuns, monitoringEvents, issueTrees) =
                 try await (
                     documentsTask, concernsTask, opportunitiesTask, hypothesesTask, findingsTask,
-                    businessProfileTask, deepAnalysisRunsTask, monitoringEventsTask
+                    businessProfileTask, deepAnalysisRunsTask, monitoringEventsTask, issueTreesTask
                 )
         } catch {
             errorMessage = error.localizedDescription
@@ -126,6 +131,24 @@ final class ProjectViewModel {
                 projectId: project.id,
                 request: ScenarioRequest(basePeriod: basePeriod, adjustments: adjustments)
             )
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func buildIssueTree(useClaude: Bool = false) async {
+        guard !isBuildingIssueTree else { return }  // TextField stays enabled while in flight; block a duplicate submit
+
+        let question = pendingIssueTreeQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !question.isEmpty else { return }
+
+        isBuildingIssueTree = true
+        defer { isBuildingIssueTree = false }
+
+        do {
+            let tree = try await client.createIssueTree(projectId: project.id, question: question, useClaude: useClaude)
+            issueTrees.insert(tree, at: 0)
+            pendingIssueTreeQuestion = ""
         } catch {
             errorMessage = error.localizedDescription
         }

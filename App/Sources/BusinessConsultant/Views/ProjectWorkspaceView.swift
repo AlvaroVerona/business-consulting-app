@@ -7,6 +7,7 @@ struct ProjectWorkspaceView: View {
     @State private var isPresentingDeepAnalysis = false
     @State private var isPresentingDashboard = false
     @State private var isPresentingScenario = false
+    @State private var isPresentingIssueTree = false
 
     var body: some View {
         HSplitView {
@@ -34,6 +35,13 @@ struct ProjectWorkspaceView: View {
             }
             ToolbarItem {
                 Button {
+                    isPresentingIssueTree = true
+                } label: {
+                    Label("Issue Trees", systemImage: "list.bullet.indent")
+                }
+            }
+            ToolbarItem {
+                Button {
                     isPresentingDeepAnalysis = true
                 } label: {
                     Label("Deep Analysis", systemImage: "chart.bar.doc.horizontal")
@@ -48,6 +56,9 @@ struct ProjectWorkspaceView: View {
         }
         .sheet(isPresented: $isPresentingScenario) {
             ScenarioView(viewModel: viewModel)
+        }
+        .sheet(isPresented: $isPresentingIssueTree) {
+            IssueTreeView(viewModel: viewModel)
         }
         .task { await viewModel.load() }
         .fileImporter(

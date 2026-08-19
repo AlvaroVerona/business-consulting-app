@@ -24,6 +24,7 @@ from src.schemas.document import DocumentOut
 from src.schemas.evidence import Citation, FindingOut
 from src.schemas.financial import FinancialAnalysisOut, PeriodMetricsOut
 from src.schemas.hypothesis import HypothesisCreate, HypothesisOut, HypothesisUpdate
+from src.schemas.issue_tree import IssueNodeOut, IssueTreeOut, IssueTreeRequest
 from src.schemas.monitoring import MonitoringEventOut
 from src.schemas.opportunity import OpportunityOut
 from src.schemas.project import ProjectCreate, ProjectOut
@@ -32,6 +33,7 @@ from src.services.business_understanding_agent import BusinessUnderstandingAgent
 from src.services.concern_detection_service import ConcernDetectionService
 from src.services.deep_analysis_orchestrator import DeepAnalysisOrchestrator
 from src.services.financial_analysis_service import FinancialAnalysisService
+from src.services.issue_tree_service import IssueTreeService
 from src.services.opportunity_detection_service import OpportunityDetectionService
 from src.services.quick_answer_service import QuickAnswerService
 from src.services.scenario_service import ScenarioService
@@ -66,6 +68,31 @@ def _period_to_out(p) -> PeriodMetricsOut:
         gross_margin=p.gross_margin,
         ebitda_margin=p.ebitda_margin,
         opex_ratio=p.opex_ratio,
+    )
+
+
+def _issue_nodes_to_out(nodes: list, parent_id: int | None) -> list[IssueNodeOut]:
+    children = sorted((n for n in nodes if n.parent_id == parent_id), key=lambda n: n.order_index)
+    return [
+        IssueNodeOut(
+            id=n.id,
+            label=n.label,
+            is_forced_mece=n.is_forced_mece,
+            overlap_note=n.overlap_note,
+            children=_issue_nodes_to_out(nodes, n.id),
+        )
+        for n in children
+    ]
+
+
+def _issue_tree_to_out(tree, nodes: list) -> IssueTreeOut:
+    return IssueTreeOut(
+        id=tree.id,
+        project_id=tree.project_id,
+        question=tree.question,
+        overall_note=tree.overall_note,
+        root_children=_issue_nodes_to_out(nodes, None),
+        created_at=tree.created_at,
     )
 
 logger = logging.getLogger(__name__)
@@ -402,3 +429,44 @@ def list_monitoring_events(project_id: int, repo: Repository = Depends(get_repo)
     if repo.get_project(project_id) is None:
         raise HTTPException(status_code=404, detail="Project not found")
     return repo.list_monitoring_events(project_id)
+
+
+# --- issue trees (spec section 4 / 15 Phase 3) ------------------------------------
+
+
+@router.post("/projects/{project_id}/issue-trees", response_model=IssueTreeOut)
+def create_issue_tree(project_id: int, payload: IssueTreeRequest, repo: Repository = Depends(get_repo)):
+    if repo.get_project(project_id) is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    llm = get_llm_client(use_claude=payload.use_claude)
+
+    try:
+        tree = IssueTreeService(repo, llm).run(project_id, payload.question)
+    except ValueError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+    return _issue_tree_to_out(tree, repo.list_issue_nodes(tree.id))
+
+
+@router.get("/projects/{project_id}/issue-trees", response_model=list[IssueTreeOut])
+def list_issue_trees(project_id: int, repo: Repository = Depends(get_repo)):
+    if repo.get_project(project_id) is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    trees = repo.list_issue_trees(project_id)
+
+    nodes_by_tree: dict[int, list] = {}
+    for node in repo.list_issue_nodes_for_project(project_id):
+        nodes_by_tree.setdefault(node.tree_id, []).append(node)
+
+    return [_issue_tree_to_out(tree, nodes_by_tree.get(tree.id, [])) for tree in trees]
+
+
+@router.get("/issue-trees/{tree_id}", response_model=IssueTreeOut)
+def get_issue_tree(tree_id: int, repo: Repository = Depends(get_repo)):
+    tree = repo.get_issue_tree(tree_id)
+    if tree is None:
+        raise HTTPException(status_code=404, detail="Issue tree not found")
+
+    return _issue_tree_to_out(tree, repo.list_issue_nodes(tree.id))
