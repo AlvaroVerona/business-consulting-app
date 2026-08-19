@@ -3,25 +3,35 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
+from pydantic import BaseModel
+
 from src.database.database import get_db
 from src.database.models import Finding
 from src.database.repository import Repository
 from src.ingestion.registry import UnsupportedFileType, parse_document
 from src.llm.router import get_llm_client
+from src.schemas.business_profile import BusinessProfileOut
 from src.schemas.chat import ChatRequest, QuickAnswer
 from src.schemas.company import CompanyCreate, CompanyOut
 from src.schemas.concern import ConcernOut
+from src.schemas.deep_analysis import DeepAnalysisRunOut
 from src.schemas.document import DocumentOut
 from src.schemas.evidence import Citation, FindingOut
 from src.schemas.financial import FinancialAnalysisOut, PeriodMetricsOut
 from src.schemas.hypothesis import HypothesisCreate, HypothesisOut, HypothesisUpdate
 from src.schemas.opportunity import OpportunityOut
 from src.schemas.project import ProjectCreate, ProjectOut
+from src.services.business_understanding_agent import BusinessUnderstandingAgent
 from src.services.concern_detection_service import ConcernDetectionService
+from src.services.deep_analysis_orchestrator import DeepAnalysisOrchestrator
 from src.services.financial_analysis_service import FinancialAnalysisService
 from src.services.opportunity_detection_service import OpportunityDetectionService
 from src.services.quick_answer_service import QuickAnswerService
 from src.storage import extension_of, save_upload
+
+
+class DeepAnalysisRequest(BaseModel):
+    use_claude: bool = False  # explicit opt-in; see llm/router.py — local Ollama is the default
 
 
 def _finding_to_out(f: Finding) -> FindingOut:
@@ -245,3 +255,53 @@ def chat(project_id: int, payload: ChatRequest, repo: Repository = Depends(get_r
     )
 
     return result
+
+
+# --- business understanding (spec section 3 / 7) --------------------------------
+
+
+@router.post("/projects/{project_id}/business-profile", response_model=BusinessProfileOut)
+def run_business_understanding(project_id: int, payload: DeepAnalysisRequest, repo: Repository = Depends(get_repo)):
+    if repo.get_project(project_id) is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    llm = get_llm_client(use_claude=payload.use_claude)
+
+    try:
+        return BusinessUnderstandingAgent(repo, llm).run(project_id)
+    except ValueError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+
+@router.get("/projects/{project_id}/business-profile", response_model=BusinessProfileOut | None)
+def get_business_profile(project_id: int, repo: Repository = Depends(get_repo)):
+    if repo.get_project(project_id) is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return repo.get_latest_business_profile(project_id)
+
+
+# --- deep analysis (spec section 2 / 15 Phase 3) ---------------------------------
+
+
+@router.post("/projects/{project_id}/deep-analysis", response_model=DeepAnalysisRunOut)
+def run_deep_analysis(project_id: int, payload: DeepAnalysisRequest, repo: Repository = Depends(get_repo)):
+    if repo.get_project(project_id) is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    llm = get_llm_client(use_claude=payload.use_claude)
+    return DeepAnalysisOrchestrator(repo, llm).run(project_id)
+
+
+@router.get("/projects/{project_id}/deep-analysis", response_model=list[DeepAnalysisRunOut])
+def list_deep_analysis_runs(project_id: int, repo: Repository = Depends(get_repo)):
+    if repo.get_project(project_id) is None:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return repo.list_deep_analysis_runs(project_id)
+
+
+@router.get("/deep-analysis/{run_id}", response_model=DeepAnalysisRunOut)
+def get_deep_analysis_run(run_id: int, repo: Repository = Depends(get_repo)):
+    run = repo.get_deep_analysis_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Deep analysis run not found")
+    return run

@@ -1,16 +1,17 @@
 import logging
 
-from src.database.models import DocumentChunk, Finding
+from src.database.models import Finding
 from src.database.repository import Repository
 from src.llm.base import LLMClient
 from src.llm.json_utils import extract_json
 from src.schemas.chat import QuickAnswer, QuickAnswerDraft
 from src.schemas.evidence import Citation, FindingOut
+from src.services.context_builder import MAX_CONTEXT_CHUNKS, build_chunk_context
+from src.services.evidence_validation import validate_evidence_citations
 
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 2
-MAX_CONTEXT_CHUNKS = 60  # crude context-length guard for local models; revisit with real retrieval later
 
 PROMPT_TEMPLATE = """You are a strategy-consulting-inspired business analyst. Answer the
 question using ONLY the evidence provided below. Never invent numbers, documents, or
@@ -69,20 +70,6 @@ FORMAT EXACTLY:
 """
 
 
-def _build_context(chunks: list[DocumentChunk]) -> str:
-    if not chunks:
-        return "(no documents have been ingested for this project yet)"
-
-    lines = []
-    for chunk in chunks[:MAX_CONTEXT_CHUNKS]:
-        lines.append(
-            f"- chunk_id={chunk.id} document_id={chunk.document_id} "
-            f"location={chunk.location} content={chunk.content}"
-        )
-
-    return "\n".join(lines)
-
-
 def _build_prior_findings_context(findings: list[Finding]) -> str:
     # Only findings from a deterministic engine (origin="engine") are worth
     # surfacing here — reusing an earlier LLM-generated CALCULATION would
@@ -115,7 +102,7 @@ class QuickAnswerService:
         chunks = self.repo.list_chunks(project_id)
         valid_chunk_ids = {c.id for c in chunks}
         valid_document_ids = {c.document_id for c in chunks}
-        context = _build_context(chunks)
+        context = build_chunk_context(chunks)
         prior_findings_context = _build_prior_findings_context(self.repo.list_findings(project_id))
 
         last_error = ""
@@ -136,7 +123,7 @@ class QuickAnswerService:
             try:
                 data = extract_json(raw)
                 candidate = QuickAnswerDraft(**data)
-                self._validate_citations(candidate, valid_chunk_ids, valid_document_ids)
+                validate_evidence_citations(candidate.evidence, valid_chunk_ids, valid_document_ids)
                 draft = candidate
                 break
             except Exception as e:  # noqa: BLE001 — feed any failure back as retry context
@@ -184,22 +171,3 @@ class QuickAnswerService:
             missing_information=draft.missing_information,
             recommended_next_question=draft.recommended_next_question,
         )
-
-    @staticmethod
-    def _validate_citations(
-        draft: QuickAnswerDraft, valid_chunk_ids: set[int], valid_document_ids: set[int]
-    ) -> None:
-        for item in draft.evidence:
-            chunk_id = item.citation.chunk_id
-            document_id = item.citation.document_id
-
-            if chunk_id is not None and chunk_id not in valid_chunk_ids:
-                raise ValueError(f"citation.chunk_id={chunk_id} does not exist in this project's evidence context")
-
-            if document_id is not None and document_id not in valid_document_ids:
-                raise ValueError(
-                    f"citation.document_id={document_id} does not exist in this project's evidence context"
-                )
-
-            if item.source_type.value == "ASSUMPTION" and chunk_id is not None:
-                raise ValueError("ASSUMPTION evidence must not cite a chunk_id")

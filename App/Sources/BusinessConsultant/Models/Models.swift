@@ -97,3 +97,147 @@ struct ProjectCreate: Codable {
     var name: String
     var description: String?
 }
+
+// MARK: - Phase 2/3: analysis engine
+
+enum Severity: String, Codable {
+    case low = "LOW"
+    case medium = "MEDIUM"
+    case high = "HIGH"
+    case critical = "CRITICAL"
+}
+
+struct Concern: Codable, Identifiable, Hashable {
+    let id: Int
+    var projectId: Int
+    var title: String
+    var severity: Severity
+    var evidenceFindingIds: [Int]
+    var businessImpact: String?
+    var rootCauseHypothesisIds: [Int]
+    var confidence: Confidence
+    var whatWouldChangeConclusion: String?
+    var recommendedAction: String?
+    let createdAt: Date
+}
+
+struct Opportunity: Codable, Identifiable, Hashable {
+    let id: Int
+    var projectId: Int
+    var title: String
+    var rationale: String
+    var evidenceFindingIds: [Int]
+    var estimatedValue: String?
+    var requiredCapabilities: String?
+    var risks: String?
+    var confidence: Confidence
+    var nextStep: String?
+    let createdAt: Date
+}
+
+enum HypothesisStatus: String, Codable, CaseIterable {
+    case confirmed = "CONFIRMED"
+    case stronglySupported = "STRONGLY_SUPPORTED"
+    case plausible = "PLAUSIBLE"
+    case inconclusive = "INCONCLUSIVE"
+    case weak = "WEAK"
+    case contradicted = "CONTRADICTED"
+}
+
+struct Hypothesis: Codable, Identifiable, Hashable {
+    let id: Int
+    var projectId: Int
+    var statement: String
+    var status: HypothesisStatus
+    var origin: String?
+    var supportingFindingIds: [Int]
+    var contradictingFindingIds: [Int]
+    var dataRequired: String?
+    var businessImpact: String?
+    var priority: String?
+    var nextTest: String?
+    let createdAt: Date
+    let updatedAt: Date
+}
+
+struct BusinessProfile: Codable, Identifiable, Hashable {
+    let id: Int
+    var projectId: Int
+    var businessModel: String?
+    var productsServices: String?
+    var customers: String?
+    var geographies: String?
+    var revenueStreams: String?
+    var costStructure: String?
+    var valueProposition: String?
+    var distributionModel: String?
+    var competitivePosition: String?
+    var keyCapabilities: String?
+    var strategicObjectives: String?
+    var missingInformation: [String]
+    var confidence: Confidence
+    var findingIds: [Int]
+    let createdAt: Date
+}
+
+struct BusinessPerformanceSummary: Codable, Hashable {
+    var revenue: String
+    var growth: String
+    var margin: String
+    var cash: String
+    var keyOperationalMetrics: [String]
+}
+
+struct StrategicOption: Codable, Hashable, Identifiable {
+    var id: String { option }
+    var option: String
+    var upside: String
+    var downside: String
+    var investment: String
+    var feasibility: Confidence
+    var risks: String
+    var recommendation: String
+}
+
+struct ActionPlanItem: Codable, Hashable, Identifiable {
+    var id: String { action }
+    var action: String
+    var dataRequirements: String?
+    var decisionNeeded: String?
+    var kpi: String?
+    var expectedImpact: String?
+}
+
+struct ExecutiveSynthesis: Codable, Hashable {
+    var overallAssessment: String
+    var keyFindings: [String]
+    var concernIds: [Int]
+    var opportunityIds: [Int]
+    var businessPerformance: BusinessPerformanceSummary
+    var strategicOptions: [StrategicOption]
+    var ninetyDayPlan: [ActionPlanItem]
+    var missingInformation: [String]
+}
+
+struct QualityIssue: Codable, Hashable, Identifiable {
+    var id: String { "\(entityType)-\(entityId)-\(issue)" }
+    var entityType: String
+    var entityId: Int
+    var issue: String
+    var detail: String
+}
+
+struct DeepAnalysisRun: Codable, Identifiable, Hashable {
+    let id: Int
+    var projectId: Int
+    var status: String
+    var error: String?
+    var executiveSummary: ExecutiveSynthesis?
+    var qualityIssues: [QualityIssue]
+    let createdAt: Date
+    var completedAt: Date?
+}
+
+struct DeepAnalysisRequest: Codable {
+    var useClaude: Bool = false
+}

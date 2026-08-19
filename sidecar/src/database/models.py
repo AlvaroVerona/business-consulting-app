@@ -51,6 +51,8 @@ class Project(Base):
     hypotheses = relationship("Hypothesis", back_populates="project", cascade="all, delete-orphan")
     concerns = relationship("Concern", back_populates="project", cascade="all, delete-orphan")
     opportunities = relationship("Opportunity", back_populates="project", cascade="all, delete-orphan")
+    business_profiles = relationship("BusinessProfile", back_populates="project", cascade="all, delete-orphan")
+    deep_analysis_runs = relationship("DeepAnalysisRun", back_populates="project", cascade="all, delete-orphan")
     chat_messages = relationship(
         "ChatMessage",
         back_populates="project",
@@ -146,6 +148,11 @@ class Hypothesis(Base):
     statement = Column(Text, nullable=False)
     status = Column(String, nullable=False, default="PLAUSIBLE")
 
+    # "manual" (created via POST /projects/{id}/hypotheses) or "agent"
+    # (HypothesisManagerAgent). A deep-analysis re-run clears and regenerates
+    # only "agent" rows — a user's manually curated hypotheses aren't touched.
+    origin = Column(String, nullable=False, default="manual")
+
     supporting_finding_ids = Column(JSON, nullable=True)
     contradicting_finding_ids = Column(JSON, nullable=True)
     data_required = Column(Text, nullable=True)
@@ -199,6 +206,59 @@ class Opportunity(Base):
     next_step = Column(Text, nullable=True)
 
     project = relationship("Project", back_populates="opportunities")
+
+
+class BusinessProfile(Base):
+    """Spec section 3, Business Understanding — the output of the Business
+    Understanding Agent (section 7), Deep Analysis mode's step 1. One project
+    can accumulate several as it's re-run; `list_business_profiles` orders by
+    recency so callers can treat the latest as current."""
+
+    __tablename__ = "business_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    business_model = Column(Text, nullable=True)
+    products_services = Column(Text, nullable=True)
+    customers = Column(Text, nullable=True)
+    geographies = Column(Text, nullable=True)
+    revenue_streams = Column(Text, nullable=True)
+    cost_structure = Column(Text, nullable=True)
+    value_proposition = Column(Text, nullable=True)
+    distribution_model = Column(Text, nullable=True)
+    competitive_position = Column(Text, nullable=True)
+    key_capabilities = Column(Text, nullable=True)
+    strategic_objectives = Column(Text, nullable=True)
+
+    missing_information = Column(JSON, nullable=True)
+    confidence = Column(String, nullable=False, default="UNKNOWN")
+    finding_ids = Column(JSON, nullable=True)
+
+    project = relationship("Project", back_populates="business_profiles")
+
+
+class DeepAnalysisRun(Base):
+    """Spec section 15 Phase 3 / section 2 Deep Analysis mode. One record per
+    orchestrated run: financial analysis -> business understanding -> concern
+    /opportunity detection -> hypothesis generation -> quality review ->
+    executive synthesis (services/deep_analysis_orchestrator.py)."""
+
+    __tablename__ = "deep_analysis_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    created_at = Column(DateTime, default=_utcnow, nullable=False)
+    completed_at = Column(DateTime, nullable=True)
+
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String, nullable=False, default="RUNNING")
+    error = Column(Text, nullable=True)
+    executive_summary = Column(JSON, nullable=True)
+    quality_issues = Column(JSON, nullable=True)
+
+    project = relationship("Project", back_populates="deep_analysis_runs")
 
 
 class ChatMessage(Base):

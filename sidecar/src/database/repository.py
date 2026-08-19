@@ -1,9 +1,13 @@
+from datetime import datetime, timezone
+
 from sqlalchemy.orm import Session
 
 from src.database.models import (
+    BusinessProfile,
     ChatMessage,
     Company,
     Concern,
+    DeepAnalysisRun,
     Document,
     DocumentChunk,
     Finding,
@@ -11,6 +15,10 @@ from src.database.models import (
     Opportunity,
     Project,
 )
+
+
+def _utcnow():
+    return datetime.now(timezone.utc)
 
 
 class Repository:
@@ -167,6 +175,14 @@ class Repository:
             .all()
         )
 
+    def clear_agent_hypotheses(self, project_id: int) -> None:
+        # Only "agent"-origin rows: a user's manually created hypotheses
+        # (origin="manual") are never auto-deleted by a deep-analysis re-run.
+        self.db.query(Hypothesis).filter(
+            Hypothesis.project_id == project_id, Hypothesis.origin == "agent"
+        ).delete()
+        self.db.commit()
+
     # --- concerns -----------------------------------------------------
 
     def create_concern(self, project_id: int, **fields) -> Concern:
@@ -185,6 +201,19 @@ class Repository:
             .order_by(Concern.created_at.desc())
             .all()
         )
+
+    def get_concern(self, concern_id: int) -> Concern | None:
+        return self.db.get(Concern, concern_id)
+
+    def update_concern(self, concern_id: int, **fields) -> Concern | None:
+        concern = self.db.get(Concern, concern_id)
+        if concern is None:
+            return None
+        for key, value in fields.items():
+            setattr(concern, key, value)
+        self.db.commit()
+        self.db.refresh(concern)
+        return concern
 
     def clear_concerns(self, project_id: int) -> None:
         self.db.query(Concern).filter(Concern.project_id == project_id).delete()
@@ -211,6 +240,67 @@ class Repository:
     def clear_opportunities(self, project_id: int) -> None:
         self.db.query(Opportunity).filter(Opportunity.project_id == project_id).delete()
         self.db.commit()
+
+    # --- business profile -----------------------------------------------
+
+    def create_business_profile(self, project_id: int, **fields) -> BusinessProfile:
+        fields.setdefault("finding_ids", [])
+        profile = BusinessProfile(project_id=project_id, **fields)
+        self.db.add(profile)
+        self.db.commit()
+        self.db.refresh(profile)
+        return profile
+
+    def get_latest_business_profile(self, project_id: int) -> BusinessProfile | None:
+        return (
+            self.db.query(BusinessProfile)
+            .filter(BusinessProfile.project_id == project_id)
+            .order_by(BusinessProfile.created_at.desc())
+            .first()
+        )
+
+    # --- deep analysis runs -----------------------------------------------
+
+    def create_deep_analysis_run(self, project_id: int) -> DeepAnalysisRun:
+        run = DeepAnalysisRun(project_id=project_id, status="RUNNING")
+        self.db.add(run)
+        self.db.commit()
+        self.db.refresh(run)
+        return run
+
+    def complete_deep_analysis_run(self, run_id: int, executive_summary: dict, quality_issues: list[dict]) -> DeepAnalysisRun | None:
+        run = self.db.get(DeepAnalysisRun, run_id)
+        if run is None:
+            return None
+        run.status = "COMPLETED"
+        run.executive_summary = executive_summary
+        run.quality_issues = quality_issues
+        run.completed_at = _utcnow()
+        self.db.commit()
+        self.db.refresh(run)
+        return run
+
+    def fail_deep_analysis_run(self, run_id: int, error: str) -> DeepAnalysisRun | None:
+        run = self.db.get(DeepAnalysisRun, run_id)
+        if run is None:
+            return None
+        run.status = "FAILED"
+        run.error = error
+        run.completed_at = _utcnow()
+        self.db.commit()
+        self.db.refresh(run)
+        return run
+
+    def get_deep_analysis_run(self, run_id: int) -> DeepAnalysisRun | None:
+        return self.db.get(DeepAnalysisRun, run_id)
+
+    def list_deep_analysis_runs(self, project_id: int) -> list[DeepAnalysisRun]:
+        return (
+            self.db.query(DeepAnalysisRun)
+            .filter(DeepAnalysisRun.project_id == project_id)
+            .order_by(DeepAnalysisRun.created_at.desc())
+            .all()
+        )
 
     # --- chat ---------------------------------------------------------
 

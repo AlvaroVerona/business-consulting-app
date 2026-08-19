@@ -148,3 +148,97 @@ def test_hypothesis_lifecycle_via_api():
         listed = client.get(f"/projects/{project['id']}/hypotheses").json()
         assert listed[0]["id"] == created["id"]
         assert listed[0]["status"] == "CONFIRMED"
+
+
+class FakeLLMSequence:
+    def __init__(self, responses: list[str]):
+        self.responses = list(responses)
+
+    def generate(self, prompt: str) -> str:
+        return self.responses.pop(0)
+
+
+def _business_profile_json() -> str:
+    return json.dumps(
+        {
+            "business_model": None, "products_services": None, "customers": None, "geographies": None,
+            "revenue_streams": None, "cost_structure": None, "value_proposition": None,
+            "distribution_model": None, "competitive_position": None, "key_capabilities": None,
+            "strategic_objectives": None, "evidence": [],
+            "missing_information": ["Only a P&L spreadsheet was provided."],
+            "confidence": "LOW",
+        }
+    )
+
+
+def _hypotheses_json() -> str:
+    return json.dumps(
+        {
+            "hypotheses": [
+                {
+                    "statement": "Supplier prices rose.",
+                    "status": "PLAUSIBLE",
+                    "data_required": "Supplier invoices.",
+                    "business_impact": None,
+                    "priority": "HIGH",
+                    "next_test": "Compare unit costs against prior contract.",
+                }
+            ]
+        }
+    )
+
+
+def _synthesis_json() -> str:
+    return json.dumps(
+        {
+            "overall_assessment": "Gross margin is compressing due to rising COGS.",
+            "key_findings": ["Gross margin fell from 60% to 30%."],
+            "concern_ids": [], "opportunity_ids": [],
+            "business_performance": {
+                "revenue": "Flat.", "growth": "0%.", "margin": "Declining.", "cash": "Not covered.",
+                "key_operational_metrics": [],
+            },
+            "strategic_options": [], "ninety_day_plan": [],
+            "missing_information": ["No customer or market data ingested."],
+        }
+    )
+
+
+def test_deep_analysis_run_via_api(monkeypatch):
+    with TestClient(app) as client:
+        company = client.post("/companies", json={"name": "Acme Wine Bar"}).json()
+        project = client.post(f"/companies/{company['id']}/projects", json={"name": "Diagnostic"}).json()
+
+        csv_bytes = b"month,revenue,cogs\nJan,10000,4000\nFeb,10000,7000\n"
+        client.post(
+            f"/projects/{project['id']}/documents",
+            files={"file": ("pnl.csv", io.BytesIO(csv_bytes), "text/csv")},
+        )
+
+        monkeypatch.setattr(
+            routes_module,
+            "get_llm_client",
+            lambda use_claude=False: FakeLLMSequence([_business_profile_json(), _hypotheses_json(), _synthesis_json()]),
+        )
+
+        run = client.post(f"/projects/{project['id']}/deep-analysis", json={}).json()
+        assert run["status"] == "COMPLETED"
+        assert run["executive_summary"]["overall_assessment"].startswith("Gross margin is compressing")
+
+        fetched = client.get(f"/deep-analysis/{run['id']}").json()
+        assert fetched["id"] == run["id"]
+
+        listed = client.get(f"/projects/{project['id']}/deep-analysis").json()
+        assert len(listed) == 1
+
+        profile = client.get(f"/projects/{project['id']}/business-profile").json()
+        assert profile["confidence"] == "LOW"
+
+
+def test_business_profile_and_deep_analysis_404_for_unknown_project():
+    """Regression: these two endpoints used to skip the project-existence
+    check every other project-scoped route in this file performs, returning
+    200 with null/empty instead of 404 for a nonexistent project_id."""
+    with TestClient(app) as client:
+        assert client.get("/projects/999999/business-profile").status_code == 404
+        assert client.get("/projects/999999/deep-analysis").status_code == 404

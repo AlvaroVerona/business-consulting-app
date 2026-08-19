@@ -39,6 +39,7 @@ class HypothesisOut(BaseModel):
     project_id: int
     statement: str
     status: HypothesisStatus
+    origin: str = "manual"
     supporting_finding_ids: list[int]
     contradicting_finding_ids: list[int]
     data_required: str | None

@@ -103,7 +103,45 @@ actor SidecarClient {
         try await post("/projects/\(projectId)/chat", body: ChatRequest(question: question, useClaude: useClaude))
     }
 
+    // MARK: - concerns / opportunities / hypotheses
+
+    func detectConcerns(projectId: Int) async throws -> [Concern] {
+        try await post("/projects/\(projectId)/concerns/detect", body: EmptyBody())
+    }
+
+    func listConcerns(projectId: Int) async throws -> [Concern] {
+        try await get("/projects/\(projectId)/concerns")
+    }
+
+    func detectOpportunities(projectId: Int) async throws -> [Opportunity] {
+        try await post("/projects/\(projectId)/opportunities/detect", body: EmptyBody())
+    }
+
+    func listOpportunities(projectId: Int) async throws -> [Opportunity] {
+        try await get("/projects/\(projectId)/opportunities")
+    }
+
+    func listHypotheses(projectId: Int) async throws -> [Hypothesis] {
+        try await get("/projects/\(projectId)/hypotheses")
+    }
+
+    // MARK: - business understanding / deep analysis
+
+    func getBusinessProfile(projectId: Int) async throws -> BusinessProfile? {
+        try await get("/projects/\(projectId)/business-profile")
+    }
+
+    func runDeepAnalysis(projectId: Int, useClaude: Bool = false) async throws -> DeepAnalysisRun {
+        try await post("/projects/\(projectId)/deep-analysis", body: DeepAnalysisRequest(useClaude: useClaude))
+    }
+
+    func listDeepAnalysisRuns(projectId: Int) async throws -> [DeepAnalysisRun] {
+        try await get("/projects/\(projectId)/deep-analysis")
+    }
+
     // MARK: - plumbing
+
+    private struct EmptyBody: Encodable {}
 
     private func get<T: Decodable>(_ path: String) async throws -> T {
         var request = URLRequest(url: baseURL.appendingPathComponent(path))

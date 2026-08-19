@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 struct ProjectWorkspaceView: View {
     @State var viewModel: ProjectViewModel
     @State private var isPresentingFileImporter = false
+    @State private var isPresentingDeepAnalysis = false
 
     var body: some View {
         HSplitView {
@@ -14,6 +15,18 @@ struct ProjectWorkspaceView: View {
                 .frame(minWidth: 420)
         }
         .navigationTitle(viewModel.project.name)
+        .toolbar {
+            ToolbarItem {
+                Button {
+                    isPresentingDeepAnalysis = true
+                } label: {
+                    Label("Deep Analysis", systemImage: "chart.bar.doc.horizontal")
+                }
+            }
+        }
+        .sheet(isPresented: $isPresentingDeepAnalysis) {
+            DeepAnalysisView(viewModel: viewModel)
+        }
         .task { await viewModel.load() }
         .fileImporter(
             isPresented: $isPresentingFileImporter,

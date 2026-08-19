@@ -71,6 +71,13 @@ final class ProjectViewModel {
     var isUploading = false
     var errorMessage: String?
 
+    var concerns: [Concern] = []
+    var opportunities: [Opportunity] = []
+    var hypotheses: [Hypothesis] = []
+    var businessProfile: BusinessProfile?
+    var deepAnalysisRuns: [DeepAnalysisRun] = []
+    var isRunningDeepAnalysis = false
+
     private let client = SidecarClient.shared
 
     init(project: Project) {
@@ -80,6 +87,26 @@ final class ProjectViewModel {
     func load() async {
         do {
             documents = try await client.listDocuments(projectId: project.id)
+            concerns = try await client.listConcerns(projectId: project.id)
+            opportunities = try await client.listOpportunities(projectId: project.id)
+            hypotheses = try await client.listHypotheses(projectId: project.id)
+            businessProfile = try await client.getBusinessProfile(projectId: project.id)
+            deepAnalysisRuns = try await client.listDeepAnalysisRuns(projectId: project.id)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    func runDeepAnalysis(useClaude: Bool = false) async {
+        isRunningDeepAnalysis = true
+        defer { isRunningDeepAnalysis = false }
+
+        do {
+            _ = try await client.runDeepAnalysis(projectId: project.id, useClaude: useClaude)
+            // The run persists new/updated concerns, opportunities, hypotheses,
+            // a business profile, and itself as a side effect — one reload
+            // picks up all of it from the authoritative server state.
+            await load()
         } catch {
             errorMessage = error.localizedDescription
         }
