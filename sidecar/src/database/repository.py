@@ -22,6 +22,15 @@ def _utcnow():
     return datetime.now(timezone.utc)
 
 
+# Spec section 15 Phase 2/Deep Analysis mode step 10: concerns/opportunities
+# must be shown *prioritized*, not just in whatever order they were detected.
+# Lower rank sorts first (most urgent/most confident first); an unrecognized
+# value sorts last rather than raising, since a future rule could introduce a
+# severity string these maps don't know about yet.
+_SEVERITY_RANK = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+_CONFIDENCE_RANK = {"HIGH": 0, "MEDIUM": 1, "LOW": 2, "UNKNOWN": 3}
+
+
 class Repository:
     """Thin CRUD layer. Keeps SQLAlchemy session handling out of the API
     routes and the services that need persistence."""
@@ -196,11 +205,10 @@ class Repository:
         return concern
 
     def list_concerns(self, project_id: int) -> list[Concern]:
-        return (
-            self.db.query(Concern)
-            .filter(Concern.project_id == project_id)
-            .order_by(Concern.created_at.desc())
-            .all()
+        concerns = self.db.query(Concern).filter(Concern.project_id == project_id).all()
+        return sorted(
+            concerns,
+            key=lambda c: (_SEVERITY_RANK.get(c.severity, 99), -c.created_at.timestamp()),
         )
 
     def get_concern(self, concern_id: int) -> Concern | None:
@@ -231,11 +239,10 @@ class Repository:
         return opportunity
 
     def list_opportunities(self, project_id: int) -> list[Opportunity]:
-        return (
-            self.db.query(Opportunity)
-            .filter(Opportunity.project_id == project_id)
-            .order_by(Opportunity.created_at.desc())
-            .all()
+        opportunities = self.db.query(Opportunity).filter(Opportunity.project_id == project_id).all()
+        return sorted(
+            opportunities,
+            key=lambda o: (_CONFIDENCE_RANK.get(o.confidence, 99), -o.created_at.timestamp()),
         )
 
     def clear_opportunities(self, project_id: int) -> None:

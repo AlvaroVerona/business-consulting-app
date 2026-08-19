@@ -75,6 +75,7 @@ final class ProjectViewModel {
     var concerns: [Concern] = []
     var opportunities: [Opportunity] = []
     var hypotheses: [Hypothesis] = []
+    var findings: [Finding] = []
     var businessProfile: BusinessProfile?
     var deepAnalysisRuns: [DeepAnalysisRun] = []
     var isRunningDeepAnalysis = false
@@ -94,20 +95,21 @@ final class ProjectViewModel {
 
     func load() async {
         do {
-            // These 7 reads are independent — running them concurrently
-            // instead of one-after-another saves 6 round-trips' worth of
+            // These 8 reads are independent — running them concurrently
+            // instead of one-after-another saves 7 round-trips' worth of
             // latency on every workspace load.
             async let documentsTask = client.listDocuments(projectId: project.id)
             async let concernsTask = client.listConcerns(projectId: project.id)
             async let opportunitiesTask = client.listOpportunities(projectId: project.id)
             async let hypothesesTask = client.listHypotheses(projectId: project.id)
+            async let findingsTask = client.listFindings(projectId: project.id)
             async let businessProfileTask = client.getBusinessProfile(projectId: project.id)
             async let deepAnalysisRunsTask = client.listDeepAnalysisRuns(projectId: project.id)
             async let monitoringEventsTask = client.listMonitoringEvents(projectId: project.id)
 
-            (documents, concerns, opportunities, hypotheses, businessProfile, deepAnalysisRuns, monitoringEvents) =
+            (documents, concerns, opportunities, hypotheses, findings, businessProfile, deepAnalysisRuns, monitoringEvents) =
                 try await (
-                    documentsTask, concernsTask, opportunitiesTask, hypothesesTask,
+                    documentsTask, concernsTask, opportunitiesTask, hypothesesTask, findingsTask,
                     businessProfileTask, deepAnalysisRunsTask, monitoringEventsTask
                 )
         } catch {

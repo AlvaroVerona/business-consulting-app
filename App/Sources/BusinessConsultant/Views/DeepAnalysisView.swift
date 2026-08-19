@@ -1,15 +1,24 @@
 import SwiftUI
 
-/// Spec section 11's executive output format, rendered from the latest
-/// DeepAnalysisRun. Concerns/opportunities are looked up from the project's
-/// full lists by the ids the synthesis referenced, so severity/confidence/
-/// evidence always come from the one source of truth (the persisted rows),
-/// never restated by the LLM.
+/// Spec section 11's executive output format. Concerns/opportunities/
+/// hypotheses are always shown from the project's full, backend-prioritized
+/// lists (repository.py sorts by severity/confidence) — never filtered down
+/// to only what the executive synthesis happened to reference. A concern the
+/// deterministic engine detected but the LLM's synthesis didn't mention is
+/// still a real, evidence-grounded concern; hiding it behind the LLM's
+/// summarization choice would violate the evidence-integrity principle this
+/// app is built around. Rows the synthesis *did* reference get a small
+/// "Highlighted" badge instead.
 struct DeepAnalysisView: View {
     @State var viewModel: ProjectViewModel
     @Environment(\.dismiss) private var dismiss
 
     var latestRun: DeepAnalysisRun? { viewModel.deepAnalysisRuns.first }
+    var synthesis: ExecutiveSynthesis? { latestRun?.status == "COMPLETED" ? latestRun?.executiveSummary : nil }
+
+    private var hasAnyData: Bool {
+        !viewModel.concerns.isEmpty || !viewModel.opportunities.isEmpty || !viewModel.hypotheses.isEmpty || latestRun != nil
+    }
 
     var body: some View {
         NavigationStack {
@@ -17,19 +26,52 @@ struct DeepAnalysisView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     header
 
-                    if let run = latestRun {
-                        switch run.status {
-                        case "COMPLETED":
-                            if let synthesis = run.executiveSummary {
-                                completedContent(synthesis)
+                    if let run = latestRun, run.status == "FAILED" {
+                        Label(run.error ?? "Deep analysis failed.", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                    } else if let run = latestRun, run.status == "RUNNING" {
+                        ProgressView("Running…")
+                    }
+
+                    if let synthesis {
+                        synthesisSummary(synthesis)
+                    }
+
+                    if !viewModel.concerns.isEmpty {
+                        Section {
+                            ForEach(viewModel.concerns) { concern in
+                                ConcernRow(
+                                    concern: concern,
+                                    isHighlighted: synthesis?.concernIds.contains(concern.id) ?? false,
+                                    allFindings: viewModel.findings
+                                )
                             }
-                        case "FAILED":
-                            Label(run.error ?? "Deep analysis failed.", systemImage: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.red)
-                        default:
-                            ProgressView("Running…")
-                        }
-                    } else {
+                        } header: { SectionHeader("Key Concerns") }
+                    }
+
+                    if !viewModel.opportunities.isEmpty {
+                        Section {
+                            ForEach(viewModel.opportunities) { opportunity in
+                                OpportunityRow(
+                                    opportunity: opportunity,
+                                    isHighlighted: synthesis?.opportunityIds.contains(opportunity.id) ?? false,
+                                    allFindings: viewModel.findings
+                                )
+                            }
+                        } header: { SectionHeader("Key Opportunities") }
+                    }
+
+                    if !viewModel.hypotheses.isEmpty {
+                        Section {
+                            ForEach(viewModel.hypotheses) { HypothesisRow(hypothesis: $0) }
+                        } header: { SectionHeader("Hypotheses") }
+                    }
+
+                    if let synthesis {
+                        synthesisDetails(synthesis)
+                    }
+
+                    if !hasAnyData {
                         ContentUnavailableView(
                             "No analysis yet",
                             systemImage: "chart.bar.doc.horizontal",
@@ -84,7 +126,7 @@ struct DeepAnalysisView: View {
     }
 
     @ViewBuilder
-    private func completedContent(_ synthesis: ExecutiveSynthesis) -> some View {
+    private func synthesisSummary(_ synthesis: ExecutiveSynthesis) -> some View {
         Section {
             Text(synthesis.overallAssessment).font(.title3)
         } header: { SectionHeader("Overall Assessment") }
@@ -98,27 +140,10 @@ struct DeepAnalysisView: View {
         Section {
             BusinessPerformanceView(summary: synthesis.businessPerformance)
         } header: { SectionHeader("Business Performance") }
+    }
 
-        let referencedConcerns = viewModel.concerns.filter { synthesis.concernIds.contains($0.id) }
-        if !referencedConcerns.isEmpty {
-            Section {
-                ForEach(referencedConcerns) { ConcernRow(concern: $0) }
-            } header: { SectionHeader("Key Concerns") }
-        }
-
-        let referencedOpportunities = viewModel.opportunities.filter { synthesis.opportunityIds.contains($0.id) }
-        if !referencedOpportunities.isEmpty {
-            Section {
-                ForEach(referencedOpportunities) { OpportunityRow(opportunity: $0) }
-            } header: { SectionHeader("Key Opportunities") }
-        }
-
-        if !viewModel.hypotheses.isEmpty {
-            Section {
-                ForEach(viewModel.hypotheses) { HypothesisRow(hypothesis: $0) }
-            } header: { SectionHeader("Hypotheses") }
-        }
-
+    @ViewBuilder
+    private func synthesisDetails(_ synthesis: ExecutiveSynthesis) -> some View {
         if !synthesis.strategicOptions.isEmpty {
             Section {
                 ForEach(synthesis.strategicOptions) { StrategicOptionRow(option: $0) }
@@ -171,18 +196,34 @@ private struct BusinessPerformanceView: View {
     }
 }
 
+private struct HighlightedBadge: View {
+    var body: some View {
+        Label("Highlighted", systemImage: "star.fill")
+            .font(.caption2.weight(.semibold))
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(Color.accentColor.opacity(0.15))
+            .foregroundStyle(Color.accentColor)
+            .clipShape(Capsule())
+    }
+}
+
 private struct ConcernRow: View {
     let concern: Concern
+    let isHighlighted: Bool
+    let allFindings: [Finding]
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(concern.title).font(.body.weight(.semibold))
                 SeverityBadge(severity: concern.severity)
+                if isHighlighted { HighlightedBadge() }
             }
             if let impact = concern.businessImpact { Text(impact).font(.callout) }
             if let action = concern.recommendedAction {
                 Text("Action: \(action)").font(.caption).foregroundStyle(.secondary)
             }
+            EvidenceDisclosure(findingIds: concern.evidenceFindingIds, allFindings: allFindings)
         }
         .padding(8)
         .background(.red.opacity(0.06))
@@ -192,13 +233,20 @@ private struct ConcernRow: View {
 
 private struct OpportunityRow: View {
     let opportunity: Opportunity
+    let isHighlighted: Bool
+    let allFindings: [Finding]
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(opportunity.title).font(.body.weight(.semibold))
+            HStack {
+                Text(opportunity.title).font(.body.weight(.semibold))
+                if isHighlighted { HighlightedBadge() }
+            }
             Text(opportunity.rationale).font(.callout)
             if let next = opportunity.nextStep {
                 Text("Next: \(next)").font(.caption).foregroundStyle(.secondary)
             }
+            EvidenceDisclosure(findingIds: opportunity.evidenceFindingIds, allFindings: allFindings)
         }
         .padding(8)
         .background(.green.opacity(0.06))

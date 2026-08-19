@@ -122,3 +122,33 @@ def test_concern_and_opportunity_crud(db_session):
     assert len(repo.list_opportunities(project.id)) == 1
     repo.clear_opportunities(project.id)
     assert repo.list_opportunities(project.id) == []
+
+
+def test_list_concerns_prioritized_by_severity_not_creation_order(db_session):
+    """Spec section 15 Phase 2 / Deep Analysis mode step 10: concerns must be
+    shown prioritized. Create the least urgent one first to prove this is
+    sorting by severity, not accidentally matching creation order."""
+    repo = Repository(db_session)
+    company = repo.create_company(name="Acme")
+    project = repo.create_project(company.id, name="P1")
+
+    repo.create_concern(project_id=project.id, title="Low priority", severity="LOW", confidence="LOW")
+    repo.create_concern(project_id=project.id, title="Critical", severity="CRITICAL", confidence="HIGH")
+    repo.create_concern(project_id=project.id, title="Medium", severity="MEDIUM", confidence="MEDIUM")
+    repo.create_concern(project_id=project.id, title="High", severity="HIGH", confidence="HIGH")
+
+    titles = [c.title for c in repo.list_concerns(project.id)]
+    assert titles == ["Critical", "High", "Medium", "Low priority"]
+
+
+def test_list_opportunities_prioritized_by_confidence(db_session):
+    repo = Repository(db_session)
+    company = repo.create_company(name="Acme")
+    project = repo.create_project(company.id, name="P1")
+
+    repo.create_opportunity(project_id=project.id, title="Low", rationale="x", confidence="LOW")
+    repo.create_opportunity(project_id=project.id, title="High", rationale="x", confidence="HIGH")
+    repo.create_opportunity(project_id=project.id, title="Medium", rationale="x", confidence="MEDIUM")
+
+    titles = [o.title for o in repo.list_opportunities(project.id)]
+    assert titles == ["High", "Medium", "Low"]
