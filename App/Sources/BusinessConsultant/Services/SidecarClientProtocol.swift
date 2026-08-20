@@ -12,6 +12,7 @@ protocol SidecarClientProtocol: Sendable {
 
     func listDocuments(projectId: Int) async throws -> [BusinessDocument]
     func uploadDocument(projectId: Int, filename: String, mimeType: String, data: Data) async throws -> BusinessDocument
+    func downloadDocumentContent(projectId: Int, documentId: Int) async throws -> Data
 
     func listFindings(projectId: Int) async throws -> [Finding]
     func askQuickQuestion(projectId: Int, question: String, useClaude: Bool) async throws -> QuickAnswer

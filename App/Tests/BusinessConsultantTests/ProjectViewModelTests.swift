@@ -3,6 +3,41 @@ import XCTest
 
 @MainActor
 final class ProjectViewModelTests: XCTestCase {
+    // MARK: - downloadDocumentContent()
+
+    func testDownloadDocumentContentReturnsTheBytes() async throws {
+        let fake = FakeSidecarClient()
+        let expected = Data("hello".utf8)
+        await fake.setDownloadDocumentContentHandler { _, documentId in
+            XCTAssertEqual(documentId, 7)
+            return expected
+        }
+        let vm = ProjectViewModel(project: Fixtures.project(), client: fake)
+
+        let data = try await vm.downloadDocumentContent(documentId: 7)
+
+        XCTAssertEqual(data, expected)
+    }
+
+    /// Unlike this class's other methods, a failed preview shouldn't
+    /// interrupt the whole workspace via the global error sheet — the
+    /// caller (DocumentPreviewSheet) shows its own contained failure state.
+    func testDownloadDocumentContentFailurePropagatesWithoutTouchingErrorMessage() async {
+        struct Boom: LocalizedError { var errorDescription: String? { "not found" } }
+        let fake = FakeSidecarClient()
+        await fake.setDownloadDocumentContentHandler { _, _ in throw Boom() }
+        let vm = ProjectViewModel(project: Fixtures.project(), client: fake)
+
+        do {
+            _ = try await vm.downloadDocumentContent(documentId: 1)
+            XCTFail("expected the error to propagate")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "not found")
+        }
+
+        XCTAssertNil(vm.errorMessage)
+    }
+
     // MARK: - ask()
 
     func testAskIgnoresBlankQuestion() async {
@@ -145,6 +180,10 @@ final class ProjectViewModelTests: XCTestCase {
 }
 
 private extension FakeSidecarClient {
+    func setDownloadDocumentContentHandler(_ handler: @escaping @Sendable (Int, Int) async throws -> Data) {
+        downloadDocumentContentHandler = handler
+    }
+
     func setAskQuickQuestionHandler(_ handler: @escaping @Sendable (Int, String, Bool) async throws -> QuickAnswer) {
         askQuickQuestionHandler = handler
     }

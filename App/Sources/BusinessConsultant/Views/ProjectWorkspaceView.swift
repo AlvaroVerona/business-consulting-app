@@ -79,6 +79,7 @@ struct ProjectWorkspaceView: View {
 private struct DocumentsPanel: View {
     @State var viewModel: ProjectViewModel
     @Binding var isPresentingFileImporter: Bool
+    @State private var previewingDocument: BusinessDocument?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -99,20 +100,38 @@ private struct DocumentsPanel: View {
             }
 
             List(viewModel.documents) { document in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(document.filename).font(.body)
-                    HStack(spacing: 4) {
-                        StatusBadge(status: document.status)
-                        if let error = document.error {
-                            Text(error)
-                                .font(.caption)
-                                .foregroundStyle(.red)
-                                .lineLimit(1)
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(document.filename).font(.body)
+                        HStack(spacing: 4) {
+                            StatusBadge(status: document.status)
+                            if let error = document.error {
+                                Text(error)
+                                    .font(.caption)
+                                    .foregroundStyle(.red)
+                                    .lineLimit(1)
+                            }
                         }
                     }
+                    Spacer()
+                    // Icon-only, deliberately not a text-labeled Button —
+                    // this panel has .textSelection(.enabled) applied at its
+                    // call site, and a text-labeled Button's click target can
+                    // compete with macOS's click-to-select-text gesture (see
+                    // the .textSelection(.enabled) re-scoping note in
+                    // .claude/CLAUDE.md).
+                    Button {
+                        previewingDocument = document
+                    } label: {
+                        Image(systemName: "eye")
+                    }
+                    .buttonStyle(.borderless)
                 }
             }
             .listStyle(.sidebar)
+        }
+        .sheet(item: $previewingDocument) { document in
+            DocumentPreviewSheet(document: document, viewModel: viewModel)
         }
     }
 }

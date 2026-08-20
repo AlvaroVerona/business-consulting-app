@@ -18,6 +18,7 @@ actor FakeSidecarClient: SidecarClientProtocol {
 
     var listDocumentsHandler: (@Sendable (Int) async throws -> [BusinessDocument])?
     var uploadDocumentHandler: (@Sendable (Int, String, String, Data) async throws -> BusinessDocument)?
+    var downloadDocumentContentHandler: (@Sendable (Int, Int) async throws -> Data)?
 
     var listFindingsHandler: (@Sendable (Int) async throws -> [Finding])?
     var askQuickQuestionHandler: (@Sendable (Int, String, Bool) async throws -> QuickAnswer)?
@@ -70,6 +71,11 @@ actor FakeSidecarClient: SidecarClientProtocol {
     func uploadDocument(projectId: Int, filename: String, mimeType: String, data: Data) async throws -> BusinessDocument {
         guard let handler = uploadDocumentHandler else { throw NotStubbed(method: "uploadDocument") }
         return try await handler(projectId, filename, mimeType, data)
+    }
+
+    func downloadDocumentContent(projectId: Int, documentId: Int) async throws -> Data {
+        guard let handler = downloadDocumentContentHandler else { throw NotStubbed(method: "downloadDocumentContent") }
+        return try await handler(projectId, documentId)
     }
 
     func listFindings(projectId: Int) async throws -> [Finding] {

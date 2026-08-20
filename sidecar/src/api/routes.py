@@ -1,4 +1,5 @@
 import logging
+import mimetypes
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import Response
@@ -38,6 +39,8 @@ from src.services.opportunity_detection_service import OpportunityDetectionServi
 from src.services.quick_answer_service import QuickAnswerService
 from src.services.scenario_service import ScenarioService
 from src.storage import extension_of, save_upload
+
+mimetypes.add_type("text/markdown", ".md")  # not in Python's mimetypes database by default
 
 
 class DeepAnalysisRequest(BaseModel):
@@ -167,6 +170,39 @@ def upload_document(project_id: int, file: UploadFile, repo: Repository = Depend
 @router.get("/projects/{project_id}/documents", response_model=list[DocumentOut])
 def list_documents(project_id: int, repo: Repository = Depends(get_repo)):
     return repo.list_documents(project_id)
+
+
+@router.get("/projects/{project_id}/documents/{document_id}/content")
+def get_document_content(project_id: int, document_id: int, repo: Repository = Depends(get_repo)):
+    """Serves the original uploaded file back (not the parsed/chunked text)
+    so the client can render a real preview — e.g. macOS Quick Look, which
+    already knows how to display PDF/CSV/DOCX/MD/XLSX natively, rather than
+    this app needing its own per-file-type renderer.
+
+    Reads the file directly (matching the reports/pdf|pptx|excel endpoints'
+    Response(content=...) pattern below) rather than an exists-check plus
+    FileResponse — a separate check-then-open has a real, if narrow, race:
+    FileResponse defers opening the path until Starlette streams the body,
+    after this function has already returned, so a file removed in between
+    would surface as an unhandled 500 instead of the intended 404. A single
+    synchronous read means the FileNotFoundError, if any, happens right
+    here where it can actually be caught."""
+    document = repo.get_document(document_id)
+    if document is None or document.project_id != project_id:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    try:
+        with open(document.storage_path, "rb") as f:
+            content = f.read()
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail="Document file is no longer available on disk") from e
+
+    media_type, _ = mimetypes.guess_type(document.filename)
+    return Response(
+        content=content,
+        media_type=media_type or "application/octet-stream",
+        headers=_attachment_headers(document.filename),
+    )
 
 
 # --- findings ------------------------------------------------------------------

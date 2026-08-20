@@ -83,6 +83,21 @@ actor SidecarClient {
         return try await send(request)
     }
 
+    /// The original uploaded bytes (not the parsed/chunked text) — used for
+    /// an in-app preview via macOS Quick Look, which already knows how to
+    /// render PDF/CSV/DOCX/MD/XLSX without this app needing its own
+    /// per-file-type renderer.
+    func downloadDocumentContent(projectId: Int, documentId: Int) async throws -> Data {
+        var request = URLRequest(url: baseURL.appendingPathComponent("/projects/\(projectId)/documents/\(documentId)/content"))
+        request.httpMethod = "GET"
+
+        let (data, response) = try await session.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw SidecarError.server(status: http.statusCode, body: String(data: data, encoding: .utf8) ?? "")
+        }
+        return data
+    }
+
     // MARK: - findings / chat
 
     func listFindings(projectId: Int) async throws -> [Finding] {

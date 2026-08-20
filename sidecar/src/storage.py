@@ -16,6 +16,20 @@ def save_upload(project_id: int, filename: str, content: bytes) -> str:
     project_dir.mkdir(parents=True, exist_ok=True)
 
     path = project_dir / safe_filename
+    if path.exists():
+        # Two documents uploaded with the same filename to the same project
+        # would otherwise silently overwrite each other on disk — found by a
+        # code review of the document-preview endpoint, which made this
+        # directly observable (an older document's preview started showing
+        # a newer document's content, since both Document rows' storage_path
+        # pointed at the one file left standing). Disambiguate with a
+        # numeric suffix, same convention as Finder ("pnl.csv" -> "pnl (1).csv").
+        stem, suffix = os.path.splitext(safe_filename)
+        n = 1
+        while path.exists():
+            path = project_dir / f"{stem} ({n}){suffix}"
+            n += 1
+
     with open(path, "wb") as f:
         f.write(content)
 

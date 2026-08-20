@@ -200,6 +200,15 @@ final class ProjectViewModel {
         }
     }
 
+    /// Deliberately doesn't set `errorMessage` on failure, unlike this
+    /// class's other methods — a failed preview is local to whichever
+    /// DocumentPreviewSheet requested it, and shouldn't interrupt the whole
+    /// workspace with the global error sheet. The caller shows its own
+    /// contained failure state instead.
+    func downloadDocumentContent(documentId: Int) async throws -> Data {
+        try await client.downloadDocumentContent(projectId: project.id, documentId: documentId)
+    }
+
     func upload(fileURL: URL) async {
         isUploading = true
         defer { isUploading = false }

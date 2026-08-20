@@ -102,6 +102,48 @@ def test_unsupported_file_type_marks_document_failed():
         assert "No parser registered" in upload["error"]
 
 
+def test_document_content_serves_the_original_file_bytes():
+    with TestClient(app) as client:
+        company = client.post("/companies", json={"name": "Acme"}).json()
+        project = client.post(f"/companies/{company['id']}/projects", json={"name": "P1"}).json()
+
+        csv_bytes = b"month,revenue\nJan,1000\n"
+        upload = client.post(
+            f"/projects/{project['id']}/documents",
+            files={"file": ("pnl.csv", io.BytesIO(csv_bytes), "text/csv")},
+        ).json()
+
+        response = client.get(f"/projects/{project['id']}/documents/{upload['id']}/content")
+
+        assert response.status_code == 200
+        assert response.content == csv_bytes  # the original bytes, not the parsed/chunked text
+        assert response.headers["content-type"].startswith("text/csv")
+
+
+def test_document_content_404s_for_unknown_document():
+    with TestClient(app) as client:
+        company = client.post("/companies", json={"name": "Acme"}).json()
+        project = client.post(f"/companies/{company['id']}/projects", json={"name": "P1"}).json()
+
+        response = client.get(f"/projects/{project['id']}/documents/999/content")
+        assert response.status_code == 404
+
+
+def test_document_content_404s_when_document_belongs_to_a_different_project():
+    with TestClient(app) as client:
+        company = client.post("/companies", json={"name": "Acme"}).json()
+        project_a = client.post(f"/companies/{company['id']}/projects", json={"name": "A"}).json()
+        project_b = client.post(f"/companies/{company['id']}/projects", json={"name": "B"}).json()
+
+        upload = client.post(
+            f"/projects/{project_a['id']}/documents",
+            files={"file": ("pnl.csv", io.BytesIO(b"a,b\n1,2\n"), "text/csv")},
+        ).json()
+
+        response = client.get(f"/projects/{project_b['id']}/documents/{upload['id']}/content")
+        assert response.status_code == 404
+
+
 def test_financial_analysis_concerns_and_opportunities_endpoints():
     with TestClient(app) as client:
         company = client.post("/companies", json={"name": "Acme Wine Bar"}).json()
