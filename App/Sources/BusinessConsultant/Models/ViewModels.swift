@@ -9,7 +9,11 @@ final class AppViewModel {
     var selectedProject: Project?
     var errorMessage: String?
 
-    private let client = SidecarClient.shared
+    private let client: any SidecarClientProtocol
+
+    init(client: any SidecarClientProtocol = SidecarClient.shared) {
+        self.client = client
+    }
 
     func loadCompanies() async {
         do {
@@ -91,10 +95,11 @@ final class ProjectViewModel {
     var pendingIssueTreeQuestion: String = ""
     var isBuildingIssueTree = false
 
-    private let client = SidecarClient.shared
+    private let client: any SidecarClientProtocol
 
-    init(project: Project) {
+    init(project: Project, client: any SidecarClientProtocol = SidecarClient.shared) {
         self.project = project
+        self.client = client
     }
 
     func load() async {
@@ -227,7 +232,7 @@ final class ProjectViewModel {
         let index = turns.count - 1
 
         do {
-            let answer = try await client.askQuickQuestion(projectId: project.id, question: question)
+            let answer = try await client.askQuickQuestion(projectId: project.id, question: question, useClaude: false)
             turn.answer = answer
         } catch {
             turn.errorMessage = error.localizedDescription

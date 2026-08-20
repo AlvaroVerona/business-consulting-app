@@ -21,34 +21,8 @@ actor SidecarClient {
 
     private let baseURL = URL(string: "http://127.0.0.1:8765")!
     private let session = URLSession(configuration: .default)
-
-    private let decoder: JSONDecoder = {
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        decoder.dateDecodingStrategy = .custom { decoder in
-            let container = try decoder.singleValueContainer()
-            let raw = try container.decode(String.self)
-
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let date = formatter.date(from: raw) { return date }
-
-            // FastAPI/SQLite naive datetimes have no timezone suffix.
-            let fallback = DateFormatter()
-            fallback.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSS"
-            fallback.timeZone = TimeZone(identifier: "UTC")
-            if let date = fallback.date(from: raw) { return date }
-
-            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unrecognized date: \(raw)")
-        }
-        return decoder
-    }()
-
-    private let encoder: JSONEncoder = {
-        let encoder = JSONEncoder()
-        encoder.keyEncodingStrategy = .convertToSnakeCase
-        return encoder
-    }()
+    private let decoder = SidecarJSON.decoder
+    private let encoder = SidecarJSON.encoder
 
     private init() {}
 

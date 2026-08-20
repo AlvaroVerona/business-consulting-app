@@ -46,6 +46,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # The Swift-side XCTest suite (BusinessConsultantTests) — view model
+      # logic against a fake SidecarClient, plus the SidecarJSON wire
+      # contract. Runs before packaging so a broken test fails fast instead
+      # of after the slower build+codesign steps.
+      - name: Run Swift tests
+        run: swift test
+
       # Runs the same script a local build uses (Scripts/build-app.sh),
       # not just `swift build` — this also catches a broken bundling/
       # codesigning step, not only a compile failure.

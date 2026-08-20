@@ -34,7 +34,14 @@ cd sidecar
 uv run pytest
 ```
 
-All 131 sidecar tests are hermetic — LLM calls go through `FakeLLM` stand-ins, never real Ollama/Claude requests, so they run the same in CI as locally. There's no equivalent automated test suite for the Swift app yet; CI's `app-build` job only verifies it still compiles and packages (`.github/workflows/ci.yml`), not that it behaves correctly.
+All 131 sidecar tests are hermetic — LLM calls go through `FakeLLM` stand-ins, never real Ollama/Claude requests, so they run the same in CI as locally.
+
+```bash
+cd App
+swift test
+```
+
+The Swift-side suite (`App/Tests/BusinessConsultantTests`) covers `AppViewModel`/`ProjectViewModel` against a `FakeSidecarClient` (no real sidecar needed) and the `SidecarJSON` wire contract (snake_case conversion, both date formats) against fixture JSON shaped like the real sidecar's output. It does not cover SwiftUI view rendering or `SidecarLauncher`'s process/lock-file handling — those stay manually tested (see the app-packaging and sidecar-auto-launch notes in `.claude/CLAUDE.md`). CI's `app-build` job runs `swift test` before packaging (`.github/workflows/ci.yml`).
 
 ## Running the macOS app
 
