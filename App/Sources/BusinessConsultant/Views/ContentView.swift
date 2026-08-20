@@ -20,16 +20,6 @@ struct ContentView: View {
                 )
             }
         }
-        .alert(
-            "Something went wrong",
-            isPresented: Binding(
-                get: { appViewModel.errorMessage != nil },
-                set: { if !$0 { appViewModel.errorMessage = nil } }
-            )
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(appViewModel.errorMessage ?? "")
-        }
+        .copyableErrorSheet(message: $appViewModel.errorMessage)
     }
 }

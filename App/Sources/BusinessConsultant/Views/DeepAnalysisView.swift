@@ -80,6 +80,7 @@ struct DeepAnalysisView: View {
                     }
                 }
                 .padding()
+                .textSelection(.enabled)
             }
             .navigationTitle("Deep Analysis")
             .toolbar {

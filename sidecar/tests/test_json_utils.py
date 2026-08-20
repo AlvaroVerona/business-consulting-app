@@ -29,6 +29,30 @@ def test_tolerates_escaped_quotes_inside_string_values():
     assert extract_json(raw) == {"answer": 'He said "revenue is up".'}
 
 
+def test_normalizes_python_none_literal():
+    """Regression: found live, repeatedly (3/3 retries on the same request)
+    with llama3.1 — it emitted Python's None instead of JSON's null in a
+    citation field, which raised on every single retry attempt since the
+    model made the same mistake every time."""
+    raw = '{"citation": {"document_id": None, "chunk_id": None, "location": null}}'
+    assert extract_json(raw) == {"citation": {"document_id": None, "chunk_id": None, "location": None}}
+
+
+def test_normalizes_python_true_false_literals():
+    raw = '{"a": True, "b": False}'
+    assert extract_json(raw) == {"a": True, "b": False}
+
+
+def test_does_not_mangle_string_content_containing_none_true_false():
+    raw = '{"answer": "None of these are True or False in isolation."}'
+    assert extract_json(raw) == {"answer": "None of these are True or False in isolation."}
+
+
+def test_does_not_mangle_identifiers_containing_the_literal_as_a_substring():
+    raw = '{"answer": "Nonesuch and Truest are not the keywords."}'
+    assert extract_json(raw) == {"answer": "Nonesuch and Truest are not the keywords."}
+
+
 def test_raises_on_no_json():
     with pytest.raises(ValueError):
         extract_json("no json here")

@@ -29,6 +29,7 @@ struct DashboardView: View {
                     }
                 }
                 .padding()
+                .textSelection(.enabled)
             }
             .navigationTitle("Dashboard")
             .toolbar {

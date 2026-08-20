@@ -38,6 +38,20 @@ answer is recognizable as such against ground truth in the documents.
   Italy/Portugal with producer names, grape varieties, and glass/bottle
   pricing. Extra grounding material for evidence citations, not structured
   for the financial engine.
+- `opex_fermento.csv` — monthly operating-expense breakdown (rent, payroll,
+  utilities, marketing, maintenance, insurance/licenses) by category, with a
+  `nota` column giving the specific reason behind each line. Not structured
+  for the deterministic financial engine either (long format, not the
+  period/revenue/cogs/opex columns `period_extractor.py` looks for) — this
+  is grounding material, same role as the wine list. Every month's line
+  items sum exactly to that month's `gastos_operativos` total in
+  `financiero_fermento.csv` (verified: 2450/2450/2550/2550/2600/2250), so
+  it's a consistent breakdown of the same numbers, not a contradiction.
+  Includes one deliberately specific, non-generic driver — an emergency
+  wine-fridge repair in July (200€, tied to the memo's spoilage narrative)
+  that explains why opex rose in July even as payroll fell from the reduced
+  hours — useful for testing whether an agent actually uses grounded detail
+  like this instead of falling back on generic "market conditions" language.
 
 Expected financial pattern: revenue rises March→May, falls May→August; gross
 margin degrades from ~40% to ~53% cost-of-sales ratio over the same period
@@ -60,7 +74,7 @@ PROJECT_ID=$(curl -s -X POST $BASE/companies/$COMPANY_ID/projects \
   -H 'Content-Type: application/json' \
   -d '{"name": "Diagnóstico agosto 2026", "description": "Caída de ventas y márgenes desde junio"}' | python3 -c 'import json,sys; print(json.load(sys.stdin)["id"])')
 
-for f in memo_fermento.md financiero_fermento.csv carta_fermento.csv; do
+for f in memo_fermento.md financiero_fermento.csv carta_fermento.csv opex_fermento.csv; do
   curl -s -X POST $BASE/projects/$PROJECT_ID/documents -F "file=@manual-tests/fermento-winebar/$f" > /dev/null
 done
 

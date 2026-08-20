@@ -13,9 +13,11 @@ struct ProjectWorkspaceView: View {
         HSplitView {
             DocumentsPanel(viewModel: viewModel, isPresentingFileImporter: $isPresentingFileImporter)
                 .frame(minWidth: 220, idealWidth: 260, maxWidth: 340)
+                .textSelection(.enabled)
 
             ChatPanel(viewModel: viewModel)
                 .frame(minWidth: 420)
+                .textSelection(.enabled)
         }
         .navigationTitle(viewModel.project.name)
         .toolbar {
@@ -70,17 +72,7 @@ struct ProjectWorkspaceView: View {
                 }
             }
         )
-        .alert(
-            "Something went wrong",
-            isPresented: Binding(
-                get: { viewModel.errorMessage != nil },
-                set: { if !$0 { viewModel.errorMessage = nil } }
-            )
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(viewModel.errorMessage ?? "")
-        }
+        .copyableErrorSheet(message: $viewModel.errorMessage)
     }
 }
 

@@ -38,6 +38,7 @@ struct IssueTreeView: View {
                             }
                         }
                     }
+                    .textSelection(.enabled)
                 }
             }
             .navigationTitle("Issue Trees")

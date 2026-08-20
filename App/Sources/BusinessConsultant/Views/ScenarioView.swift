@@ -60,6 +60,7 @@ struct ScenarioView: View {
                             ComparisonRow(label: "Gross Margin", baseline: result.baseline.grossMargin, scenario: result.scenario.grossMargin, format: .percent)
                             ComparisonRow(label: "EBITDA Margin", baseline: result.baseline.ebitdaMargin, scenario: result.scenario.ebitdaMargin, format: .percent)
                         }
+                        .textSelection(.enabled)
                     }
                 }
             }

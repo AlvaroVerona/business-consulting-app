@@ -1,0 +1,37 @@
+mes,categoria,importe,nota
+2026-03,alquiler,1850,"Local en Malasaña, contrato fijo"
+2026-03,nominas,340,Sara media jornada
+2026-03,suministros,100,luz agua gas
+2026-03,marketing,50,redes sociales
+2026-03,mantenimiento,30,limpieza y varios
+2026-03,seguros_licencias,80,seguro responsabilidad civil + licencia hosteleria
+2026-04,alquiler,1850,"Local en Malasaña, contrato fijo"
+2026-04,nominas,340,Sara media jornada
+2026-04,suministros,100,luz agua gas
+2026-04,marketing,50,redes sociales
+2026-04,mantenimiento,30,limpieza y varios
+2026-04,seguros_licencias,80,seguro responsabilidad civil + licencia hosteleria
+2026-05,alquiler,1850,"Local en Malasaña, contrato fijo"
+2026-05,nominas,400,mas horas de Sara por el buen ritmo de mayo
+2026-05,suministros,110,luz agua gas
+2026-05,marketing,60,promo cata a ciegas de mayo
+2026-05,mantenimiento,50,limpieza y varios
+2026-05,seguros_licencias,80,seguro responsabilidad civil + licencia hosteleria
+2026-06,alquiler,1850,"Local en Malasaña, contrato fijo"
+2026-06,nominas,380,empieza a bajar la ocupacion entre semana
+2026-06,suministros,130,mas aire acondicionado por el calor
+2026-06,marketing,60,redes sociales
+2026-06,mantenimiento,50,limpieza y varios
+2026-06,seguros_licencias,80,seguro responsabilidad civil + licencia hosteleria
+2026-07,alquiler,1850,"Local en Malasaña, contrato fijo, no baja aunque bajen las ventas"
+2026-07,nominas,300,"horario reducido desde julio, cerrado lunes y martes"
+2026-07,suministros,140,aire acondicionado en pico de calor
+2026-07,marketing,30,recorte de marketing por la caja de verano
+2026-07,mantenimiento,200,"reparacion urgente de la camara de frio de vinos, factor critico para no perder mas botellas abiertas"
+2026-07,seguros_licencias,80,seguro responsabilidad civil + licencia hosteleria
+2026-08,alquiler,1850,"Local en Malasaña, contrato fijo, no baja aunque bajen las ventas"
+2026-08,nominas,200,"horas de Sara recortadas aun mas, entre semana casi sin clientela"
+2026-08,suministros,100,luz agua gas
+2026-08,marketing,20,"minimo indispensable, sin presupuesto para mas"
+2026-08,mantenimiento,0,sin incidencias este mes
+2026-08,seguros_licencias,80,seguro responsabilidad civil + licencia hosteleria
