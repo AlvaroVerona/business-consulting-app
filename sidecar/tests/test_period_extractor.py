@@ -52,6 +52,17 @@ def test_recognizes_spanish_column_aliases():
     assert p.cogs == 600
 
 
+def test_recognizes_peninsular_spanish_coste_alias():
+    """"Coste" (Spain) vs "costo" (Latin America) — found live ingesting a
+    Madrid business's financials, where "coste_ventas" matched nothing."""
+    chunks = [_chunk(1, 10, "mes: Marzo; ingresos: 1000; coste_ventas: 600")]
+
+    p = extract_periods(chunks)[0]
+
+    assert p.revenue == 1000
+    assert p.cogs == 600
+
+
 def test_skips_rows_missing_required_fields():
     chunks = [
         _chunk(1, 10, "item: some unrelated inventory row; qty: 5"),

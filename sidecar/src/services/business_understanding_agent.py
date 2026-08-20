@@ -72,13 +72,13 @@ class BusinessUnderstandingAgent:
 
     def run(self, project_id: int) -> BusinessProfile:
         chunks = self.repo.list_chunks(project_id)
-        valid_chunk_ids = {c.id for c in chunks}
+        chunk_document_ids = {c.id: c.document_id for c in chunks}
         valid_document_ids = {c.document_id for c in chunks}
         context = build_chunk_context(chunks)
 
         def parse(data: dict) -> BusinessProfileDraft:
             candidate = BusinessProfileDraft(**data)
-            validate_evidence_citations(candidate.evidence, valid_chunk_ids, valid_document_ids)
+            validate_evidence_citations(candidate.evidence, chunk_document_ids, valid_document_ids)
             return candidate
 
         draft = generate_json_with_retry(

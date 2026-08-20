@@ -28,6 +28,27 @@ def test_improving_opex_efficiency_flagged_as_opportunity(db_session):
     assert opportunities[0].title == "Operating cost efficiency improving"
 
 
+def test_material_improvement_after_a_dip_is_still_flagged(db_session):
+    """Regression, symmetric to concern_detection_service's equivalent test:
+    an opex ratio that worsens then improves is classified "mixed", not
+    "improving" — the old code gated on == "improving" and never reached
+    the materiality check for a "mixed" series."""
+    repo = Repository(db_session)
+    project_id = _seed_pnl(
+        repo,
+        [
+            "month: Jan; revenue: 10000; cogs: 6000; opex: 2000",  # opex ratio 20%
+            "month: Feb; revenue: 10000; cogs: 6000; opex: 2600",  # 26% — worsens first
+            "month: Mar; revenue: 10000; cogs: 6000; opex: 1200",  # 12% — then a material improvement
+        ],
+    )
+    analysis = FinancialAnalysisService(repo).run(project_id)
+
+    opportunities = OpportunityDetectionService(repo).run(project_id, analysis)
+
+    assert "Operating cost efficiency improving" in [o.title for o in opportunities]
+
+
 def test_no_opex_data_yields_no_opportunity(db_session):
     repo = Repository(db_session)
     project_id = _seed_pnl(

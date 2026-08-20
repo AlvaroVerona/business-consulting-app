@@ -4,6 +4,16 @@ from src.database.repository import Repository
 from src.services.financial_analysis_service import FinancialAnalysisResult
 from src.services.monitoring import record_monitoring_diff
 
+# Same fix as ConcernDetectionService's _CONCERNING_TRENDS, for the same
+# reason: classify_trend() only returns "improving" for a strictly monotonic
+# series, so an opex ratio that dipped then rose again (or vice versa) gets
+# classified "mixed" and would never reach the materiality check below. The
+# `risks`/`required_capabilities` text on the created Opportunity already
+# tells the reader to confirm the trend is durable before acting on it —
+# that caveat is the right response to a noisier "mixed" trend, not hiding
+# the opportunity entirely.
+_IMPROVING_TRENDS = {"improving", "mixed"}
+
 
 class OpportunityDetectionService:
     """Deliberately narrow for this slice: one deterministic rule (operating
@@ -23,7 +33,7 @@ class OpportunityDetectionService:
 
         if len(analysis.periods) >= 2:
             opex_ratios = [p.opex_ratio for p in analysis.periods if p.opex_ratio is not None]
-            if len(opex_ratios) >= 2 and classify_trend(opex_ratios, higher_is_better=False) == "improving":
+            if len(opex_ratios) >= 2 and classify_trend(opex_ratios, higher_is_better=False) in _IMPROVING_TRENDS:
                 drop = opex_ratios[0] - opex_ratios[-1]
                 if drop >= MATERIALITY_THRESHOLD:
                     first, last = analysis.periods[0].period, analysis.periods[-1].period

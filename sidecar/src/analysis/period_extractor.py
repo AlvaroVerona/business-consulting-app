@@ -11,7 +11,19 @@ from src.database.models import DocumentChunk
 _ALIASES: dict[str, set[str]] = {
     "period": {"period", "month", "mes", "fecha", "date", "quarter", "trimestre"},
     "revenue": {"revenue", "sales", "ingresos", "ventas", "facturacion"},
-    "cogs": {"cogs", "cost_of_goods_sold", "cost of goods sold", "costo_de_ventas", "costo de ventas"},
+    "cogs": {
+        "cogs",
+        "cost_of_goods_sold",
+        "cost of goods sold",
+        "costo_de_ventas",
+        "costo de ventas",
+        # "coste" (not "costo") is the term used in Spain's Spanish, as
+        # opposed to Latin American Spanish — found live while ingesting a
+        # Madrid business's financials, where "coste_ventas" matched nothing.
+        "coste_ventas",
+        "coste de ventas",
+        "coste_de_ventas",
+    },
     "opex": {"opex", "sga", "sg&a", "operating_expenses", "operating expenses", "gastos_operativos", "gastos operativos"},
     "ebitda": {"ebitda"},
 }

@@ -96,14 +96,14 @@ class QuickAnswerService:
 
     def answer(self, project_id: int, question: str) -> QuickAnswer:
         chunks = self.repo.list_chunks(project_id)
-        valid_chunk_ids = {c.id for c in chunks}
+        chunk_document_ids = {c.id: c.document_id for c in chunks}
         valid_document_ids = {c.document_id for c in chunks}
         context = build_chunk_context(chunks)
         prior_findings_context = _build_prior_findings_context(self.repo.list_findings(project_id))
 
         def parse(data: dict) -> QuickAnswerDraft:
             candidate = QuickAnswerDraft(**data)
-            validate_evidence_citations(candidate.evidence, valid_chunk_ids, valid_document_ids)
+            validate_evidence_citations(candidate.evidence, chunk_document_ids, valid_document_ids)
             return candidate
 
         draft = generate_json_with_retry(

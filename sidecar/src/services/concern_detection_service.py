@@ -4,6 +4,19 @@ from src.database.repository import Repository
 from src.services.financial_analysis_service import FinancialAnalysisResult
 from src.services.monitoring import record_monitoring_diff
 
+# classify_trend() only returns "declining" for a *strictly* monotonic
+# series — a business that rose then fell (a ramp-up followed by a real
+# decline, an extremely common real-world shape) gets classified "mixed",
+# not "declining". Found live: a wine bar's 6-month P&L (peak in month 3,
+# then a real slide) never triggered either concern below despite a 13-point
+# gross margin drop and a >50% revenue decline from peak to latest, because
+# the old code gated on trend == "declining" alone before ever reaching the
+# materiality check that's supposed to be the actual filter. "stable" and
+# "improving" are still excluded — the materiality check on first-vs-last
+# already returns None for those on real data (see the docstring on each
+# method below); this only reopens the door "mixed" wrongly closed.
+_CONCERNING_TRENDS = {"declining", "mixed"}
+
 
 class ConcernDetectionService:
     """Rule-based, not LLM-based (spec section 4: concerns need evidence,
@@ -37,7 +50,7 @@ class ConcernDetectionService:
         return concerns
 
     def _margin_compression(self, project_id: int, analysis: FinancialAnalysisResult) -> Concern | None:
-        if analysis.gross_margin_trend != "declining":
+        if analysis.gross_margin_trend not in _CONCERNING_TRENDS:
             return None
 
         margins = [p.gross_margin for p in analysis.periods if p.gross_margin is not None]
@@ -66,7 +79,7 @@ class ConcernDetectionService:
         )
 
     def _revenue_decline(self, project_id: int, analysis: FinancialAnalysisResult) -> Concern | None:
-        if analysis.revenue_trend != "declining":
+        if analysis.revenue_trend not in _CONCERNING_TRENDS:
             return None
 
         revenues = [p.revenue for p in analysis.periods if p.revenue is not None]

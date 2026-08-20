@@ -38,6 +38,28 @@ def test_material_margin_drop_flagged_as_concern(db_session):
     assert not any("ebitda margin" in f.statement.lower() for f in cited_findings)
 
 
+def test_material_drop_after_a_rise_is_still_flagged(db_session):
+    """Regression: classify_trend() labels a rise-then-fall series "mixed",
+    not "declining" — a real business's ramp-up-then-slide shape. The old
+    code gated on trend == "declining" and never reached the materiality
+    check for a "mixed" series, no matter how large the first-to-last drop."""
+    repo = Repository(db_session)
+    project_id = _seed_pnl(
+        repo,
+        [
+            "month: Mar; revenue: 10000; cogs: 4000",  # 60% gross margin
+            "month: Apr; revenue: 10000; cogs: 3500",  # 65% — rises first
+            "month: May; revenue: 10000; cogs: 7000",  # 30% — then a material drop
+        ],
+    )
+    analysis = FinancialAnalysisService(repo).run(project_id)
+    assert analysis.gross_margin_trend == "mixed"  # pins the premise this test guards against
+
+    concerns = ConcernDetectionService(repo).run(project_id, analysis)
+
+    assert "Gross margin compression" in [c.title for c in concerns]
+
+
 def test_small_margin_wobble_not_flagged(db_session):
     repo = Repository(db_session)
     project_id = _seed_pnl(

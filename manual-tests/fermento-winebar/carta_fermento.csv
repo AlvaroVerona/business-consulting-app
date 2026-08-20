@@ -1,0 +1,17 @@
+nombre,bodega,pais,region,uva,tipo,añada,precio_copa,precio_botella,proveedor_directo
+Mencía Salvaxe,Adega Cepa Salvaxe,España,Ribeira Sacra,Mencía,Tinto,2023,5,20,si
+Garnacha de Cebreros,Bodega Garnacha Salvaje,España,Cebreros,Garnacha,Tinto,2022,5,20,si
+Bierzo Altos del Sil,Bodega Altos del Sil,España,Bierzo,Mencía,Tinto,2021,6,24,si
+Rioja Piedra Alavesa,Bodega Piedra Alavesa,España,Rioja Alavesa,Tempranillo,Tinto,2020,6,24,no
+Priorat Terra Negra,Priorat Terra Negra,España,Priorat,"Garnacha, Cariñena",Tinto,2021,6,24,no
+Godello Ribeira,Adega Cepa Salvaxe,España,Ribeira Sacra,Godello,Blanco,2023,5,20,si
+Beaujolais Vignes Folles,Domaine des Vignes Folles,Francia,Beaujolais,Gamay,Tinto,2023,6,24,si
+Chenin Loira Salvaje,Clos de la Loire Sauvage,Francia,Loira,Chenin Blanc,Blanco,2022,6,24,si
+Jura Ouillé Blanco,Domaine du Jura Ouillé,Francia,Jura,"Chardonnay, Savagnin",Blanco,2021,7,28,si
+Cabernet Franc Loira,Clos de la Loire Sauvage,Francia,Loira,Cabernet Franc,Tinto,2022,6,24,si
+Kvevri Naranja Kakheti,Marani Kvevri,Georgia,Kakheti,Rkatsiteli,Naranja,2022,6,24,si
+Saperavi Kvevri,Marani Kvevri,Georgia,Kakheti,Saperavi,Tinto,2021,6,24,si
+Malbec Valle de Uco,Bodega Piedra Andina,Argentina,Valle de Uco,Malbec,Tinto,2022,6,24,si
+Pinot Noir Patagonia,Finca Viento Patagónico,Argentina,Patagonia,Pinot Noir,Tinto,2022,7,28,si
+Etna Rosso Selvaggio,Tenuta Etna Selvaggia,Italia,Etna,Nerello Mascalese,Tinto,2021,7,28,no
+Douro Bravo Tinto,Quinta do Douro Bravo,Portugal,Douro,"Touriga Nacional, Tinta Roriz",Tinto,2020,6,24,no
