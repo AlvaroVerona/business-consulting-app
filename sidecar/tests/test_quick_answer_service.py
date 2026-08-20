@@ -88,6 +88,66 @@ def test_answer_retries_on_fabricated_citation(db_session):
     assert result.evidence[0].citation.chunk_id == chunk_id
 
 
+def test_answer_tolerates_an_empty_recommended_next_question(db_session):
+    """recommended_next_question is best-effort, not evidence-integrity —
+    found live that llama3.1 sometimes leaves it empty even with an
+    explicit prompt rule telling it not to, and a first attempt at fixing
+    this by raising on empty (forcing a retry) made things worse: it
+    exhausted all 3 attempts and turned a perfectly good answer into a
+    hard failure most of the time. This field must never be able to sink
+    an otherwise-valid answer — the Swift UI hides the "Recommended next
+    question" section instead when it's empty."""
+    repo, project, document = _seed_project(db_session)
+    chunk_id = repo.list_chunks(project.id)[0].id
+
+    empty_suggestion = json.loads(_valid_response(chunk_id, document.id))
+    empty_suggestion["recommended_next_question"] = ""
+
+    llm = FakeLLM([json.dumps(empty_suggestion)])
+    result = QuickAnswerService(repo, llm).answer(project.id, "What is the gross margin?")
+
+    assert llm.calls == 1
+    assert result.recommended_next_question == ""
+    assert result.answer  # the rest of the answer is still fully usable
+
+
+def test_answer_tolerates_a_missing_recommended_next_question_key(db_session):
+    """Regression, found by a code review of the fix above: the new "never
+    empty" prompt rule could push the model toward omitting the key
+    entirely instead of sending "" — a plain (non-Optional) `str` field
+    would reject that with a validation error, reproducing the exact
+    502-after-3-retries regression the empty-string fix was meant to
+    prevent, just via a different JSON shape."""
+    repo, project, document = _seed_project(db_session)
+    chunk_id = repo.list_chunks(project.id)[0].id
+
+    missing_key = json.loads(_valid_response(chunk_id, document.id))
+    del missing_key["recommended_next_question"]
+
+    llm = FakeLLM([json.dumps(missing_key)])
+    result = QuickAnswerService(repo, llm).answer(project.id, "What is the gross margin?")
+
+    assert llm.calls == 1
+    assert result.recommended_next_question == ""
+
+
+def test_answer_tolerates_a_null_recommended_next_question(db_session):
+    """Same regression as the missing-key case above, but for the model
+    sending JSON null instead — the exact "Python None instead of null"
+    mistake this project already hit and fixed for other fields."""
+    repo, project, document = _seed_project(db_session)
+    chunk_id = repo.list_chunks(project.id)[0].id
+
+    null_value = json.loads(_valid_response(chunk_id, document.id))
+    null_value["recommended_next_question"] = None
+
+    llm = FakeLLM([json.dumps(null_value)])
+    result = QuickAnswerService(repo, llm).answer(project.id, "What is the gross margin?")
+
+    assert llm.calls == 1
+    assert result.recommended_next_question == ""
+
+
 def test_prior_findings_context_does_not_expose_a_conflatable_finding_id(db_session):
     """Regression test for a live bug: the context used to say
     "finding_id=9 chunk_id=1 ...", and llama3.1 cited chunk_id=9 (the

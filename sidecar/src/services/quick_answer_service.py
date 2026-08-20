@@ -33,6 +33,10 @@ RULES:
 - ALREADY-COMPUTED FINDINGS below were computed by deterministic code, not a language model —
   they are more reliable than arithmetic you do yourself. If one answers part of the question,
   reuse its exact number and cite the same chunk_id/document_id rather than recomputing it.
+- "recommended_next_question" must NEVER be an empty string. Write one concrete, specific
+  follow-up question that deepens THIS analysis — grounded in what THIS answer's evidence
+  actually showed (e.g. if the answer names a specific driver, ask about that driver next), not
+  a generic "what else would you like to know?". This is a required output, not optional.
 
 EVIDENCE CONTEXT (each item: chunk_id, document_id, filename, location, content):
 {context}
@@ -165,5 +169,9 @@ class QuickAnswerService:
             reasoning=draft.reasoning,
             confidence=draft.confidence,
             missing_information=draft.missing_information,
-            recommended_next_question=draft.recommended_next_question,
+            # QuickAnswer's own field stays plain `str` (the outward
+            # contract, matching Swift's non-optional String) — only the
+            # draft accepts None, to tolerate a model that omits the key or
+            # sends null instead of "".
+            recommended_next_question=draft.recommended_next_question or "",
         )

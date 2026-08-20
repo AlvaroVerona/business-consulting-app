@@ -17,7 +17,15 @@ class QuickAnswerDraft(BaseModel):
     reasoning: str
     confidence: Confidence
     missing_information: list[str]
-    recommended_next_question: str
+    # str | None, not plain str: this field is best-effort (see
+    # quick_answer_service.py's PROMPT_TEMPLATE comment) and a local model
+    # asked to "never leave it empty" sometimes omits the key entirely or
+    # emits JSON null instead of "" — the same "Python None instead of null"
+    # class of mistake already hit and fixed elsewhere in this project. A
+    # plain `str` field rejects both (missing key needs Optional to default;
+    # explicit null isn't a valid str even with a default), which would
+    # exhaust every retry and 502 the whole answer over a non-critical field.
+    recommended_next_question: str | None = None
 
 
 class QuickAnswer(BaseModel):

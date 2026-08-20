@@ -67,9 +67,20 @@ private struct QuickAnswerCard: View {
                 }
             }
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Recommended next question").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                Text(answer.recommendedNextQuestion).font(.callout.italic())
+            // Best-effort, not guaranteed — a local model doesn't always
+            // produce one even when asked to (see quick_answer_service.py's
+            // PROMPT_TEMPLATE comment). Hiding the section entirely when
+            // empty avoids showing a "Recommended next question" header
+            // with nothing under it, which read as the app having broken.
+            // Trimmed, not a raw .isEmpty check — a whitespace-only value
+            // (a model under pressure not to send "" could send " "
+            // instead) would pass a raw check but still render as blank.
+            let trimmedNextQuestion = answer.recommendedNextQuestion.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedNextQuestion.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Recommended next question").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Text(trimmedNextQuestion).font(.callout.italic())
+                }
             }
         }
         .padding(.leading, 28)
