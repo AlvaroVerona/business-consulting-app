@@ -1,5 +1,7 @@
 # Business Consulting App
 
+[![CI](https://github.com/AlvaroVerona/business-consulting-app/actions/workflows/ci.yml/badge.svg)](https://github.com/AlvaroVerona/business-consulting-app/actions/workflows/ci.yml)
+
 AI-powered business consulting / strategy-analysis macOS app. Spec: `../CLAUDE_CODE_BUSINESS_CONSULTING_SPEC.md`. Discovery notes and architecture decisions: `../DISCOVERY.md`. MVP (spec section 18's Definition of Done, 13/13) complete as of 2026-08-19 — see `.claude/CLAUDE.md` for the full build history.
 
 ## Stack
@@ -31,6 +33,8 @@ uv run uvicorn src.main:app --reload --port 8765
 cd sidecar
 uv run pytest
 ```
+
+All 131 sidecar tests are hermetic — LLM calls go through `FakeLLM` stand-ins, never real Ollama/Claude requests, so they run the same in CI as locally. There's no equivalent automated test suite for the Swift app yet; CI's `app-build` job only verifies it still compiles and packages (`.github/workflows/ci.yml`), not that it behaves correctly.
 
 ## Running the macOS app
 

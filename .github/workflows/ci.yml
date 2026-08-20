@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  sidecar-tests:
+    name: Sidecar tests (Python)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sidecar
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      # All 131 tests are hermetic (FakeLLM stand-ins, no real Ollama/Claude
+      # calls, SQLite created fresh per test via tests/conftest.py) — no
+      # external services needed here.
+      - name: Run tests
+        run: uv run pytest -q
+
+  app-build:
+    name: macOS app build + packaging
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: App
+    steps:
+      - uses: actions/checkout@v4
+
+      # Runs the same script a local build uses (Scripts/build-app.sh),
+      # not just `swift build` — this also catches a broken bundling/
+      # codesigning step, not only a compile failure.
+      - name: Build and package the app
+        run: ./Scripts/build-app.sh
+
+      - name: Verify the bundle
+        run: |
+          test -f .build/app/BusinessConsultant.app/Contents/MacOS/BusinessConsultant
+          test -f .build/app/BusinessConsultant.app/Contents/Resources/AppIcon.icns
+          codesign --verify --verbose .build/app/BusinessConsultant.app
