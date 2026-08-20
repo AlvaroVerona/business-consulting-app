@@ -89,8 +89,25 @@ actor SidecarClient {
         try await get("/projects/\(projectId)/findings")
     }
 
+    /// `timeoutInterval` overrides here (and on runDeepAnalysis/createIssueTree
+    /// below) exist because the session's default 60s (URLSession(configuration:
+    /// .default)'s timeoutIntervalForRequest) isn't enough for these three
+    /// specifically — every other call is a fast CRUD op or deterministic
+    /// computation, but these hit a local Ollama model with its own retry
+    /// loop (up to 3 generation attempts server-side on a parse/validation
+    /// failure) and can additionally need to wait for Ollama to cold-start
+    /// the model if it was idle. Reproduced live: a Quick Answer question hit
+    /// exactly this combination (one retry + a model that had just spun back
+    /// up) and the 60s default timed out client-side while the sidecar was
+    /// still legitimately working — confirmed by the sidecar's own log
+    /// showing no timeout on its end (it has none talking to Ollama) and the
+    /// request eventually would have succeeded.
     func askQuickQuestion(projectId: Int, question: String, useClaude: Bool = false) async throws -> QuickAnswer {
-        try await post("/projects/\(projectId)/chat", body: ChatRequest(question: question, useClaude: useClaude))
+        try await post(
+            "/projects/\(projectId)/chat",
+            body: ChatRequest(question: question, useClaude: useClaude),
+            timeoutInterval: 120
+        )
     }
 
     // MARK: - concerns / opportunities / hypotheses
@@ -121,8 +138,18 @@ actor SidecarClient {
         try await get("/projects/\(projectId)/business-profile")
     }
 
+    /// Longest timeout of the three (see askQuickQuestion's doc comment for
+    /// why these need one at all): this runs a multi-step pipeline
+    /// (BusinessUnderstandingAgent, HypothesisManagerAgent per concern,
+    /// ExecutiveSynthesizerService), each with its own up-to-3-attempt retry
+    /// loop — measured live at ~50s total with zero retries needed, so a
+    /// single retry anywhere in the chain pushes well past 60s.
     func runDeepAnalysis(projectId: Int, useClaude: Bool = false) async throws -> DeepAnalysisRun {
-        try await post("/projects/\(projectId)/deep-analysis", body: DeepAnalysisRequest(useClaude: useClaude))
+        try await post(
+            "/projects/\(projectId)/deep-analysis",
+            body: DeepAnalysisRequest(useClaude: useClaude),
+            timeoutInterval: 300
+        )
     }
 
     func listDeepAnalysisRuns(projectId: Int) async throws -> [DeepAnalysisRun] {
@@ -170,8 +197,14 @@ actor SidecarClient {
 
     // MARK: - issue trees
 
+    /// See askQuickQuestion's doc comment for why this needs a longer
+    /// timeout than the session default.
     func createIssueTree(projectId: Int, question: String, useClaude: Bool = false) async throws -> IssueTree {
-        try await post("/projects/\(projectId)/issue-trees", body: IssueTreeRequest(question: question, useClaude: useClaude))
+        try await post(
+            "/projects/\(projectId)/issue-trees",
+            body: IssueTreeRequest(question: question, useClaude: useClaude),
+            timeoutInterval: 120
+        )
     }
 
     func listIssueTrees(projectId: Int) async throws -> [IssueTree] {
@@ -188,11 +221,14 @@ actor SidecarClient {
         return try await send(request)
     }
 
-    private func post<Body: Encodable, T: Decodable>(_ path: String, body: Body) async throws -> T {
+    private func post<Body: Encodable, T: Decodable>(
+        _ path: String, body: Body, timeoutInterval: TimeInterval? = nil
+    ) async throws -> T {
         var request = URLRequest(url: baseURL.appendingPathComponent(path))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try encoder.encode(body)
+        if let timeoutInterval { request.timeoutInterval = timeoutInterval }
         return try await send(request)
     }
 
