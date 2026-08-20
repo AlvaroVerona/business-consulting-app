@@ -75,11 +75,24 @@ def _build_prior_findings_context(findings: list[Finding]) -> str:
     if not engine_findings:
         return "(none yet — run financial analysis for this project to populate this)"
 
+    # Cross-period totals ("Total opex from ... was ...") are few (at most
+    # 4: revenue/COGS/opex/EBITDA) but exactly what a question like "what's
+    # the total opex" needs — and repository.list_findings orders newest
+    # first, so on a project with many periods (many per-period + growth
+    # findings, all created after the totals within one run()) they'd sort
+    # past the slice below and never reach the LLM at all, silently
+    # reproducing the bug this whole mechanism exists to prevent. Listed
+    # first, unconditionally, so volume elsewhere can never crowd them out.
+    totals_findings = [f for f in engine_findings if f.statement.startswith("Total ")]
+    other_findings = [f for f in engine_findings if not f.statement.startswith("Total ")]
+    remaining_budget = max(MAX_CONTEXT_CHUNKS - len(totals_findings), 0)
+    prioritized = totals_findings + other_findings[:remaining_budget]
+
     # Deliberately omits the Finding's own id: it's not a citable chunk_id,
     # and listing it next to chunk_id/document_id invites the LLM to conflate
     # the two (reproduced live: it cited a finding_id as a citation.chunk_id).
     lines = []
-    for f in engine_findings[:MAX_CONTEXT_CHUNKS]:
+    for f in prioritized:
         lines.append(
             f"- statement={f.statement}"
             + (f" calculation={f.calculation}" if f.calculation else "")

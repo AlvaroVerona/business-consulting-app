@@ -120,6 +120,47 @@ def test_prior_findings_context_does_not_expose_a_conflatable_finding_id(db_sess
     assert "LLM-derived aside" not in context
 
 
+def test_prior_findings_context_never_drops_totals_findings_to_volume(db_session):
+    """Regression, found by a code review reproducing it directly: totals
+    findings ("Total opex from ... was ...") are created before the
+    per-period/growth findings within one FinancialAnalysisService.run(),
+    so on a project with many periods they have older created_at and
+    repository.list_findings orders newest-first — meaning they used to
+    sort past the MAX_CONTEXT_CHUNKS slice and never reach the LLM prompt
+    at all on a large project, silently reproducing the exact "LLM has to
+    sum the periods itself" bug this whole mechanism exists to prevent."""
+    from src.services.context_builder import MAX_CONTEXT_CHUNKS
+
+    repo, project, document = _seed_project(db_session)
+    chunk_id = repo.list_chunks(project.id)[0].id
+
+    repo.create_finding(
+        project_id=project.id,
+        statement="Total opex from Jan to Dec (12 periods) was 30,000.00.",
+        source_type="CALCULATION",
+        confidence="HIGH",
+        origin="engine",
+        calculation="2500 + 2500 + ... = 30000.00",
+    )
+    # Many findings created *after* the totals finding, same as a real
+    # run() where growth/trend findings persist after totals — enough to
+    # push the totals finding past a naive [:MAX_CONTEXT_CHUNKS] slice.
+    for i in range(MAX_CONTEXT_CHUNKS + 10):
+        repo.create_finding(
+            project_id=project.id,
+            statement=f"Gross margin in period {i} was 40%.",
+            source_type="CALCULATION",
+            confidence="HIGH",
+            origin="engine",
+            document_id=document.id,
+            chunk_id=chunk_id,
+        )
+
+    context = _build_prior_findings_context(repo.list_findings(project.id))
+
+    assert "Total opex from Jan to Dec" in context
+
+
 def test_answer_raises_after_exhausting_retries(db_session):
     repo, project, document = _seed_project(db_session)
 

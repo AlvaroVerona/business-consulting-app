@@ -40,6 +40,8 @@ class FinancialAnalysisService:
         for p in periods:
             findings.extend(self._persist_period_findings(project_id, p, existing_by_statement))
 
+        findings.extend(self._persist_totals_findings(project_id, periods, existing_by_statement))
+
         for previous, current in zip(periods, periods[1:]):
             growth_finding = self._persist_growth_finding(project_id, previous, current, existing_by_statement)
             if growth_finding is not None:
@@ -119,6 +121,59 @@ class FinancialAnalysisService:
                     chunk_id=p.chunk_id,
                     location={"period": p.period},
                     calculation=formula,
+                )
+            )
+
+        return created
+
+    def _persist_totals_findings(
+        self, project_id: int, periods: list[PeriodMetrics], existing_by_statement: dict[str, Finding]
+    ) -> list[Finding]:
+        """Cross-period sums (total revenue/COGS/opex/EBITDA across every
+        ingested period). Added after a live test asking "what's the total
+        opex" showed llama3.1 badly miscalculating it when left to figure
+        out the sum itself: it used the wrong formula entirely (revenue -
+        cogs, which is gross profit, not opex), its own shown arithmetic
+        didn't match the numbers it reported, and the final total didn't
+        even match the sum of its own line items. Only per-period metrics
+        existed as engine findings before this — a cross-period sum is
+        exactly the multi-step arithmetic spec section 13 says shouldn't be
+        left to the LLM, same reasoning as every other function in
+        analysis/financial.py."""
+
+        if not periods:
+            return []
+
+        created = []
+
+        for label, field in (("revenue", "revenue"), ("COGS", "cogs"), ("opex", "opex"), ("EBITDA", "ebitda")):
+            values_with_periods = [(p.period, getattr(p, field)) for p in periods if getattr(p, field) is not None]
+            if not values_with_periods:
+                continue
+
+            # The range in the statement must reflect the periods actually
+            # summed, not the project's overall period list — a field that's
+            # missing from the first/last period (e.g. opex only reported
+            # from month 2 onward) would otherwise produce a statement like
+            # "Total opex from Jan to Mar" that quietly includes a month
+            # whose opex was never in the sum, misleading anything (a person
+            # or the LLM) that reads only the statement without re-deriving
+            # the range from the calculation field.
+            first, last = values_with_periods[0][0], values_with_periods[-1][0]
+            total = sum(v for _, v in values_with_periods)
+            expression = " + ".join(f"{v:g}" for _, v in values_with_periods)
+
+            created.append(
+                self._get_or_create(
+                    project_id,
+                    f"Total {label} from {first} to {last} ({len(values_with_periods)} periods) was {total:,.2f}.",
+                    existing_by_statement,
+                    source_type="CALCULATION",
+                    confidence="HIGH",
+                    document_id=None,
+                    chunk_id=None,
+                    location={"periods": [period for period, _ in values_with_periods]},
+                    calculation=f"{expression} = {total:,.2f}",
                 )
             )
 
