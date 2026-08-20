@@ -35,7 +35,11 @@ jobs:
 
   app-build:
     name: macOS app build + packaging
-    runs-on: macos-14
+    # macos-14's default Xcode (15.x) ships Swift 5.10, too old for this
+    # package's `swift-tools-version: 6.0` — macos-15's default Xcode (16.4)
+    # bundles Swift 6. Confirmed via the runner-images repo's README, not
+    # assumed: https://github.com/actions/runner-images/blob/main/images/macos/macos-15-Readme.md
+    runs-on: macos-15
     defaults:
       run:
         working-directory: App
