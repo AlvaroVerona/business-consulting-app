@@ -15,6 +15,8 @@ Described a wine *bar* as a wine *producer* — despite the real Spanish memo be
 
 > [!question] Decision needed
 > Run the same Fermento scenario with `useClaude=true` and compare the business profile output directly. If Claude gets it right, this becomes a documented model-tier trade-off, not a bug to chase further in code.
+>
+> **Blocked 2026-08-24**: needs an `ANTHROPIC_API_KEY` (`sidecar/.env` doesn't exist yet, only `.env.example`) and Álvaro said explicitly he doesn't want to spend any money on this right now — even the opt-in path he approved for the hybrid decision ([[Decisions/LLM backend]]) isn't free to actually exercise. Revisit when he's ready to set up a key, not before.
 
 ## QuickAnswerService creates duplicate Findings
 
