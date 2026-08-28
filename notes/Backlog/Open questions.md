@@ -25,11 +25,8 @@ Described a wine *bar* as a wine *producer* — despite the real Spanish memo be
 > [!question] Decision needed
 > Is this actually a problem worth fixing? Each QuickAnswer's evidence arguably *should* be its own row (self-contained per answer), unlike the engine's cross-call idempotency requirement. Lean toward "leave it" unless the findings table growing unbounded becomes a real issue (e.g. for [[Decisions/LLM backend|context budget]] reasons via `_build_prior_findings_context`).
 
-## No true background monitoring
-
-"Continuous Monitoring" only diffs concerns/opportunities when detection is triggered while the app is open — not a real scheduled daemon. Explicitly scoped out of Phase 5, documented as a real gap, not forgotten.
-
-> [!question] Decision needed
-> Worth a launchd-based background job at all for a single-user local tool? Or is "diffed whenever you open the app" actually fine for how this gets used in practice?
-
 See also: [[Home]]
+
+## Resolved
+
+- ~~No true background monitoring~~ — closed 2026-08-24 via a launchd `LaunchAgent` (`sidecar/scripts/run_monitoring.py` + `install_monitoring.sh`/`uninstall_monitoring.sh`), runs every 6h. See the CLAUDE.md changelog entry. Not yet actually installed on Álvaro's machine — the script exists and is tested/live-verified, but `install_monitoring.sh` hasn't been run.
