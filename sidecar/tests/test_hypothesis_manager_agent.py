@@ -8,9 +8,11 @@ class FakeLLM:
     def __init__(self, responses: list[str]):
         self.responses = list(responses)
         self.calls = 0
+        self.prompts: list[str] = []
 
     def generate(self, prompt: str) -> str:
         self.calls += 1
+        self.prompts.append(prompt)
         return self.responses.pop(0)
 
 
@@ -90,6 +92,67 @@ def test_rerun_clears_prior_agent_hypotheses_but_keeps_manual_ones(db_session):
     assert statements == {"A user's own hunch.", "Second run's cause."}
     assert "First run's cause." not in statements
     assert manual.id in [h.id for h in remaining]  # manual hypothesis survives untouched
+
+
+def test_prompt_is_grounded_in_business_profile_documents_and_concern_findings(db_session):
+    """Regression for the Fermento finding: without this, the prompt only
+    ever saw the concern's own title/business_impact fields, producing
+    generic hypotheses disconnected from what the project's documents
+    actually said."""
+    repo = Repository(db_session)
+    company = repo.create_company(name="Acme")
+    project = repo.create_project(company.id, name="P1")
+    document = repo.create_document(project.id, filename="memo.md", file_type="md", storage_path="/tmp/memo.md")
+    repo.add_chunks(document.id, [{"content": "Our main supplier has had 3-week delivery delays since June.", "location": {}}])
+    repo.create_business_profile(
+        project_id=project.id,
+        business_model="Natural wine bar with a small kitchen",
+        products_services=None,
+        customers=None,
+        geographies=None,
+        revenue_streams=None,
+        cost_structure="Wine purchased from a single European importer",
+        value_proposition=None,
+        distribution_model=None,
+        competitive_position=None,
+        key_capabilities=None,
+        strategic_objectives=None,
+        missing_information=[],
+        confidence="MEDIUM",
+        finding_ids=[],
+    )
+    supporting = repo.create_finding(
+        project_id=project.id, statement="Gross margin fell from 68% in March to 40% in August.",
+        source_type="CALCULATION", confidence="HIGH", origin="engine",
+    )
+    concern = repo.create_concern(
+        project_id=project.id, title="Gross margin compression", severity="HIGH", confidence="HIGH",
+        evidence_finding_ids=[supporting.id],
+    )
+
+    llm = FakeLLM([_hypotheses_response("Supplier delays forced emergency restocking at higher spot prices.")])
+    HypothesisManagerAgent(repo, llm).run(project.id, [concern])
+
+    assert llm.calls == 1
+    prompt = llm.prompts[0]
+    assert "Natural wine bar with a small kitchen" in prompt
+    assert "Wine purchased from a single European importer" in prompt
+    assert "3-week delivery delays since June" in prompt
+    assert "Gross margin fell from 68% in March to 40% in August." in prompt
+
+
+def test_prompt_degrades_gracefully_with_no_profile_documents_or_supporting_findings(db_session):
+    repo = Repository(db_session)
+    company = repo.create_company(name="Acme")
+    project = repo.create_project(company.id, name="P1")
+    concern = repo.create_concern(project_id=project.id, title="Revenue decline", severity="HIGH", confidence="HIGH")
+
+    llm = FakeLLM([_hypotheses_response("Some cause.")])
+    created = HypothesisManagerAgent(repo, llm).run(project.id, [concern])
+
+    assert len(created) == 1
+    assert "no business understanding profile available" in llm.prompts[0]
+    assert "(none)" in llm.prompts[0]  # concern findings section, empty
 
 
 def test_one_concerns_llm_failure_does_not_block_others(db_session):

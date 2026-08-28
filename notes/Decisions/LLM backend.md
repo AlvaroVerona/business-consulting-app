@@ -10,9 +10,9 @@
 > Local `llama3.1` (8B, quantized) has real, repeatedly-observed limitations — not hypothetical ones:
 > - Arithmetic errors on multi-step calculations (the reason the deterministic financial engine exists at all — [CLAUDE.md](../../.claude/CLAUDE.md)'s original Phase 2 entry)
 > - JSON that isn't quite JSON: Python `None`/`True`/`False` instead of `null`/`true`/`false`, single-quoted dict literals — `llm/json_utils.py`'s `_normalize_python_literals` exists only because of this
-> - Near-total hallucination on a longer Spanish-language business profile (described Fermento, a wine *bar*, as a wine *producer* — "vineyard maintenance", "wine clubs") despite the real memo being fully in its prompt context. Not yet compared against `useClaude=true` on the same input — that comparison is still open, see [[Backlog/Open questions]].
-> - A small (4096-token) context window on the actual running model (`ps aux | grep llama-server` shows `-c 4096 --context-shift`), which silently discards early context under pressure rather than erroring
-
 None of these are edge cases anymore — they're the normal operating conditions of this backend. Every deterministic-engine addition in this project (financial calculations, cross-period totals) exists specifically to keep arithmetic and lookups out of the LLM's hands, not because it was a nice-to-have.
+
+> [!success] Resolved 2026-08-28: the "hallucination" was a context-window bug, not a model limit
+> The near-total hallucination on Fermento's business profile (described a wine *bar* as a wine *producer*) turned out to be caused by `ollama_client.py` never setting `num_ctx` — Ollama's real default (4096, confirmed live via `ollama ps`) silently truncated the prompt rather than erroring, and the real Fermento chunk dump alone measured ~4171 tokens, already over that budget. Bumped the client's default to 8192 (`OLLAMA_NUM_CTX` env override). Re-ran the same Fermento profile live afterward: correctly identifies it as a wine bar in Malasaña. No `useClaude=true` comparison was needed — see [CLAUDE.md](../../.claude/CLAUDE.md)'s "Root cause found for two open items" entry.
 
 See also: [[Home]]
