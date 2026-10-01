@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/AlvaroVerona/business-consulting-app/actions/workflows/ci.yml/badge.svg)](https://github.com/AlvaroVerona/business-consulting-app/actions/workflows/ci.yml)
 
-AI-powered business consulting / strategy-analysis macOS app. Spec: `../CLAUDE_CODE_BUSINESS_CONSULTING_SPEC.md`. Discovery notes and architecture decisions: `../DISCOVERY.md`. MVP (spec section 18's Definition of Done, 13/13) complete as of 2026-08-19 — see `.claude/CLAUDE.md` for the full build history.
+AI-powered business consulting / strategy-analysis macOS app. Architecture decisions: [`docs/notes/Decisions/`](docs/notes/Decisions/). MVP (13/13 of the definition of done) complete as of 2026-08-19 — see [`docs/ENGINEERING_LOG.md`](docs/ENGINEERING_LOG.md) for the full build history, every bug found and fixed.
 
 ## Stack
 
@@ -11,7 +11,7 @@ AI-powered business consulting / strategy-analysis macOS app. Spec: `../CLAUDE_C
 
 ## Why two languages
 
-Documented in `../DISCOVERY.md` under "Proposed Technical Architecture". Short version: reuses working multi-agent/schema-validation patterns from `~/agent-platform`, and Python's document-parsing ecosystem (openpyxl, python-docx, pypdf) is more mature than Swift's for this product's ingestion requirements.
+Documented in [`docs/notes/Decisions/Stack.md`](docs/notes/Decisions/Stack.md). Short version: reuses working multi-agent/schema-validation patterns from an earlier multi-agent project, and Python's document-parsing ecosystem (openpyxl, python-docx, pypdf) is more mature than Swift's for this product's ingestion requirements.
 
 ## LLM backend
 
@@ -41,7 +41,7 @@ cd App
 swift test
 ```
 
-The Swift-side suite (`App/Tests/BusinessConsultantTests`) covers `AppViewModel`/`ProjectViewModel` against a `FakeSidecarClient` (no real sidecar needed) and the `SidecarJSON` wire contract (snake_case conversion, both date formats) against fixture JSON shaped like the real sidecar's output. It does not cover SwiftUI view rendering or `SidecarLauncher`'s process/lock-file handling — those stay manually tested (see the app-packaging and sidecar-auto-launch notes in `.claude/CLAUDE.md`). CI's `app-build` job runs `swift test` before packaging (`.github/workflows/ci.yml`).
+The Swift-side suite (`App/Tests/BusinessConsultantTests`) covers `AppViewModel`/`ProjectViewModel` against a `FakeSidecarClient` (no real sidecar needed) and the `SidecarJSON` wire contract (snake_case conversion, both date formats) against fixture JSON shaped like the real sidecar's output. It does not cover SwiftUI view rendering or `SidecarLauncher`'s process/lock-file handling — those stay manually tested (see the app-packaging and sidecar-auto-launch notes in `docs/ENGINEERING_LOG.md`). CI's `app-build` job runs `swift test` before packaging (`.github/workflows/ci.yml`).
 
 ## Running the macOS app
 
@@ -52,7 +52,7 @@ cd App
 swift run
 ```
 
-As a real, double-clickable app: this project is a Swift Package, not an Xcode project (see `../DISCOVERY.md` for why), so there's no Xcode-managed `.app` bundle — `App/Scripts/build-app.sh` assembles one by hand from the SwiftPM release build, with a generated icon (`App/Resources/AppIcon.icns`, source: `App/Scripts/generate_icon.swift`) and `Info.plist`, ad-hoc code-signed for local use:
+As a real, double-clickable app: this project is a Swift Package, not an Xcode project (see [`docs/notes/Decisions/Stack.md`](docs/notes/Decisions/Stack.md) for why), so there's no Xcode-managed `.app` bundle — `App/Scripts/build-app.sh` assembles one by hand from the SwiftPM release build, with a generated icon (`App/Resources/AppIcon.icns`, source: `App/Scripts/generate_icon.swift`) and `Info.plist`, ad-hoc code-signed for local use:
 
 ```bash
 cd App

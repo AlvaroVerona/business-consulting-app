@@ -6,7 +6,7 @@ Fictional business built specifically to exercise the app against something non-
 > The app's hermetic pytest suite already covers correctness against `FakeLLM` stand-ins. This scenario exists to answer a different question — is the output actually *useful*, run against the real local model — and a toy dataset with obvious answers wouldn't stress that.
 
 > [!bug] What it's found so far
-> Every one of these was found by actually asking the app real questions against this data and checking the answer against a hand-computed ground truth, not by reading code. See [CLAUDE.md](../../.claude/CLAUDE.md) for the full dated write-up of each.
+> Every one of these was found by actually asking the app real questions against this data and checking the answer against a hand-computed ground truth, not by reading code. See [CLAUDE.md](../ENGINEERING_LOG.md) for the full dated write-up of each.
 > - `coste_ventas` (Peninsular Spanish) not recognized as COGS — only `costo_de_ventas` (Latin American Spanish) was
 > - Concern/opportunity detection blind to a rise-then-fall ("mixed") trend — a 13pt margin drop produced zero alerts
 > - Citation validation accepted a chunk_id from one document paired with a different document's document_id
