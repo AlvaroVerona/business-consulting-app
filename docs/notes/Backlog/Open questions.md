@@ -1,6 +1,6 @@
 # Open questions
 
-Real gaps found during live testing, deliberately not fixed yet — either because the fix is a genuine design decision, not a quick patch, or because the next step is a comparison/experiment rather than a code change. Each has a dated entry in [CLAUDE.md](../../.claude/CLAUDE.md) with the full finding; this note tracks *what to decide*, not what happened.
+Real gaps found during live testing, deliberately not fixed yet — either because the fix is a genuine design decision, not a quick patch, or because the next step is a comparison/experiment rather than a code change. Each has a dated entry in [CLAUDE.md](../ENGINEERING_LOG.md) with the full finding; this note tracks *what to decide*, not what happened.
 
 ## QuickAnswerService creates duplicate Findings
 

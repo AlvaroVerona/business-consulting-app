@@ -25,3 +25,6 @@ sidecar/data/
 # Obsidian's local workspace state (window layout, plugin list) — not portable,
 # not meant to be shared; the notes themselves (notes/*.md) are tracked normally.
 notes/.obsidian/
+
+# Obsidian local state
+.obsidian/
